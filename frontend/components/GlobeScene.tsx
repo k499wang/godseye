@@ -50,14 +50,14 @@ const atmVert = /* glsl */ `
 const atmFrag = /* glsl */ `
   varying vec3 vNormal;
   void main() {
-    float intensity = pow(0.72 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.2);
-    gl_FragColor = vec4(0.18, 0.52, 1.0, 1.0) * intensity * 1.8;
+    float intensity = pow(0.72 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.8);
+    gl_FragColor = vec4(0.18, 0.52, 1.0, 1.0) * intensity * 0.7;
   }
 `;
 
 function Atmosphere() {
   return (
-    <mesh scale={1.16}>
+    <mesh scale={1.10}>
       <sphereGeometry args={[1, 64, 64]} />
       <shaderMaterial
         vertexShader={atmVert}
@@ -199,8 +199,8 @@ function EarthSystem({ events, visibleIds, activeEvent, onEventSelect, isAutoSpi
         <sphereGeometry args={[1, 96, 96]} />
         <meshPhongMaterial
           map={texture}
-          specular={new THREE.Color(0x222222)}
-          shininess={6}
+          specular={new THREE.Color(0x444444)}
+          shininess={12}
         />
       </mesh>
 
@@ -335,9 +335,9 @@ function Scene({
 
   return (
     <>
-      <ambientLight intensity={0.3} />
-      <directionalLight position={[5, 3, 5]} intensity={1.1} color="#fff5e0" />
-      <directionalLight position={[-8, -2, -4]} intensity={0.1} color="#3060ff" />
+      <ambientLight intensity={1.1} />
+      <directionalLight position={[5, 3, 5]} intensity={2.0} color="#fff8f0" />
+      <directionalLight position={[-8, -2, -4]} intensity={0.4} color="#4080ff" />
 
       <Stars radius={90} depth={60} count={6000} factor={3.5} saturation={0} fade speed={0.4} />
 

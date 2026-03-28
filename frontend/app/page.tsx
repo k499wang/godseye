@@ -73,14 +73,14 @@ function GlobePage() {
   return (
     <main
       className="relative w-screen h-screen overflow-hidden"
-      style={{ background: "var(--bg-base)" }}
+      style={{ background: "#080810" }}
     >
       {/* Deep-space vignette */}
       <div
         className="absolute inset-0 pointer-events-none z-10"
         style={{
           background:
-            "radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(5,5,9,0.75) 100%)",
+            "radial-gradient(ellipse at 50% 50%, transparent 65%, rgba(8,8,16,0.4) 100%)",
         }}
       />
 
