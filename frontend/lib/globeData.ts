@@ -34,19 +34,6 @@ export const CATEGORY_COLOR: Record<GlobeEventCategory, string> = {
   macro: "#F97316",
 };
 
-function slugToLatLng(slug: string): { lat: number; lng: number } {
-  let h1 = 0, h2 = 0;
-  for (let i = 0; i < slug.length; i++) {
-    const c = slug.charCodeAt(i);
-    h1 = (h1 * 31 + c) & 0xffff;
-    h2 = (h2 * 37 + c * 3) & 0xffff;
-  }
-  // Keep away from poles (±60) so globe projection doesn't cluster dots
-  const lat = (h1 / 0xffff) * 120 - 60;
-  const lng = (h2 / 0xffff) * 360 - 180;
-  return { lat, lng };
-}
-
 function classifyCategory(title: string): GlobeEventCategory {
   const t = title.toLowerCase();
   if (/war|ceasefire|military|russia|ukraine|china|taiwan|iran|israel|nato|conflict|troops|invasion|sanction/.test(t))
@@ -62,29 +49,16 @@ function classifyCategory(title: string): GlobeEventCategory {
   return "macro";
 }
 
-function deriveRegion(title: string): string {
-  const t = title.toLowerCase();
-  if (/russia|ukraine/.test(t)) return "Eastern Europe";
-  if (/china|taiwan|hong kong/.test(t)) return "Asia Pacific";
-  if (/iran|israel|middle east|gaza|saudi/.test(t)) return "Middle East";
-  if (/india/.test(t)) return "India";
-  if (/europe|eu |ecb|germany|france|uk |britain/.test(t)) return "Europe";
-  if (/bitcoin|crypto|ethereum/.test(t)) return "Global";
-  if (/nfl|nba|mlb|nhl|ncaa|college|illini|hawkeye|boilermaker|wildcat|huskie|spartan|jayhawk|wolverine|buckeye/.test(t)) return "United States";
-  if (/world cup|fifa|olympic|global/.test(t)) return "Global";
-  return "Global";
-}
 
 export function browseItemToGlobeEvent(item: MarketBrowseItem): GlobeEvent {
-  const { lat, lng } = slugToLatLng(item.slug);
   return {
     id: item.slug,
     title: item.title.length > 50 ? item.title.slice(0, 47) + "…" : item.title,
-    region: deriveRegion(item.title),
+    region: item.region,
     question: item.title,
     probability: item.probability,
-    lat,
-    lng,
+    lat: item.lat,
+    lng: item.lng,
     category: classifyCategory(item.title),
     simulationId: null,
     volume: item.volume,

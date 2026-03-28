@@ -122,6 +122,9 @@ export interface MarketBrowseItem {
   volume: number;
   volume24hr: number;
   probability: number | null;
+  lat: number;
+  lng: number;
+  region: string;
 }
 
 export interface MarketBrowseResponse {

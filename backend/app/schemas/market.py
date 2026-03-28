@@ -26,6 +26,9 @@ class MarketBrowseItem(BaseModel):
     volume: float
     volume24hr: float
     probability: float | None  # None for multi-outcome events
+    lat: float = 0.0
+    lng: float = 0.0
+    region: str = "Global"
 
 
 class MarketBrowseResponse(BaseModel):
