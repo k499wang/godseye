@@ -1,0 +1,11 @@
+{
+  "lsp": {
+    "pyright": {
+      "settings": {
+        "python": {
+          "pythonPath": "/Users/sunny/godseye/backend/venv/bin/python"
+        }
+      }
+    }
+  }
+}
