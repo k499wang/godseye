@@ -252,5 +252,72 @@ class PolymarketClient:
                 return max(volume, Decimal("0"))
         return Decimal("0")
 
+    async def fetch_active_events(self, limit: int = 20) -> list[dict[str, Any]]:
+        """
+        Return a list of active Polymarket events sorted by volume, suitable
+        for the browse feed.  Each item is a normalised dict with keys:
+            slug, title, description, url, image, volume, volume24hr, probability
+        """
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            response = await client.get(
+                f"{self.base_url}/events",
+                params={
+                    "active": "true",
+                    "limit": str(limit),
+                    "order": "volume24hr",
+                    "ascending": "false",
+                },
+            )
+            response.raise_for_status()
+
+        raw_events: list[dict[str, Any]] = response.json()
+        if not isinstance(raw_events, list):
+            return []
+
+        results: list[dict[str, Any]] = []
+        for event in raw_events:
+            if not isinstance(event, dict):
+                continue
+            slug = str(event.get("slug") or "").strip()
+            title = str(event.get("title") or "").strip()
+            if not slug or not title:
+                continue
+
+            description = str(event.get("description") or "").strip()
+            image = event.get("image") or event.get("icon") or None
+            volume = float(_coerce_decimal(event.get("volume") or 0))
+            volume24hr = float(_coerce_decimal(event.get("volume24hr") or 0))
+            url = f"https://polymarket.com/event/{slug}"
+
+            # Probability: only meaningful for binary (single Yes/No) markets
+            probability: float | None = None
+            markets = event.get("markets")
+            if isinstance(markets, list) and len(markets) == 1:
+                m = markets[0]
+                if isinstance(m, dict):
+                    outcome_prices = m.get("outcomePrices")
+                    if isinstance(outcome_prices, str):
+                        try:
+                            outcome_prices = json.loads(outcome_prices)
+                        except json.JSONDecodeError:
+                            outcome_prices = None
+                    if isinstance(outcome_prices, list) and outcome_prices:
+                        p = float(_coerce_decimal(outcome_prices[0]))
+                        if 0.0 <= p <= 1.0:
+                            probability = p
+
+            results.append({
+                "slug": slug,
+                "title": title,
+                "description": description,
+                "url": url,
+                "image": image,
+                "volume": volume,
+                "volume24hr": volume24hr,
+                "probability": probability,
+            })
+
+        return results
+
 
 polymarket_client = PolymarketClient()
