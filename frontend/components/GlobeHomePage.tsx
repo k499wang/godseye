@@ -123,6 +123,28 @@ export function GlobeHomePage({
   }, [showControlsMenu]);
 
   useEffect(() => {
+    if (!inExplore) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.code === "Space" || event.key === " ")) return;
+
+      const target = event.target as HTMLElement | null;
+      const isTypingTarget =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable;
+
+      if (isTypingTarget) return;
+
+      event.preventDefault();
+      setAutoSpinEnabled(!autoSpinEnabled);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [autoSpinEnabled, inExplore, setAutoSpinEnabled]);
+
+  useEffect(() => {
     if (!initialSelectedEventId) {
       setSelectedEventId(null);
       setGlobeFocusTarget(null);
