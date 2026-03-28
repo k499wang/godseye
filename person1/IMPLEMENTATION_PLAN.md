@@ -205,6 +205,12 @@ Goal:
 
 - Move stubs into a stable relational model before integration work expands.
 
+Hackathon note:
+
+- Step 6 is optional cleanup, not a blocker.
+- Do only the Step 6 items that directly unblock Person 2, Person 3, or Person 4.
+- If the shared contracts, Supabase schema, and route integrations are already working, move on instead of polishing ORM details.
+
 Tasks:
 
 - [ ] Add primary keys and foreign keys
