@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  useRef,
-  useState,
-  useEffect,
-  Suspense,
-  forwardRef,
-  useImperativeHandle,
-} from "react";
+import { useRef, useState, useEffect, Suspense } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Stars, OrbitControls, Html, useTexture } from "@react-three/drei";
 import * as THREE from "three";
@@ -15,23 +8,26 @@ import type { GlobeEvent } from "@/lib/globeData";
 import { CATEGORY_COLOR } from "@/lib/globeData";
 
 // ---------------------------------------------------------------------------
-// Utilities
+// Coordinate utility
 // ---------------------------------------------------------------------------
 
-/** Convert lat/lng degrees to a 3D unit-sphere point.
- *  Three.js Y-up convention, sphere facing +Z at lng=0,lat=0.
+/**
+ * Converts geographic lat/lng to a Three.js Vector3 on a sphere of given radius.
+ * Matches Three.js SphereGeometry UV convention exactly:
+ *   phi  = (lng + 180) * π/180   [azimuth, wraps texture left→right]
+ *   theta = (90 - lat) * π/180   [polar, 0 = north pole]
+ *   x = -cos(phi) * sin(theta) * r
+ *   y =  cos(theta)             * r
+ *   z =  sin(phi) * sin(theta)  * r
+ * At lng ≈ -90 the Americas face +Z (toward a camera sitting on +Z). ✓
  */
-export function latLngToVec3(
-  lat: number,
-  lng: number,
-  radius: number
-): THREE.Vector3 {
-  const phi = (90 - lat) * (Math.PI / 180); // colatitude
-  const theta = (lng + 180) * (Math.PI / 180); // azimuth
+export function latLngToVec3(lat: number, lng: number, r: number): THREE.Vector3 {
+  const phi = (lng + 180) * (Math.PI / 180);
+  const theta = (90 - lat) * (Math.PI / 180);
   return new THREE.Vector3(
-    -radius * Math.sin(phi) * Math.cos(theta),
-    radius * Math.cos(phi),
-    radius * Math.sin(phi) * Math.sin(theta)
+    -Math.cos(phi) * Math.sin(theta) * r,
+    Math.cos(theta) * r,
+    Math.sin(phi) * Math.sin(theta) * r
   );
 }
 
@@ -40,10 +36,10 @@ function easeInOutCubic(t: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// Shaders
+// Shaders — atmospheric rim glow
 // ---------------------------------------------------------------------------
 
-const atmosphereVertexShader = /* glsl */ `
+const atmVert = /* glsl */ `
   varying vec3 vNormal;
   void main() {
     vNormal = normalize(normalMatrix * normal);
@@ -51,7 +47,7 @@ const atmosphereVertexShader = /* glsl */ `
   }
 `;
 
-const atmosphereFragmentShader = /* glsl */ `
+const atmFrag = /* glsl */ `
   varying vec3 vNormal;
   void main() {
     float intensity = pow(0.72 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.2);
@@ -59,17 +55,13 @@ const atmosphereFragmentShader = /* glsl */ `
   }
 `;
 
-// ---------------------------------------------------------------------------
-// Atmosphere glow
-// ---------------------------------------------------------------------------
-
 function Atmosphere() {
   return (
     <mesh scale={1.16}>
       <sphereGeometry args={[1, 64, 64]} />
       <shaderMaterial
-        vertexShader={atmosphereVertexShader}
-        fragmentShader={atmosphereFragmentShader}
+        vertexShader={atmVert}
+        fragmentShader={atmFrag}
         blending={THREE.AdditiveBlending}
         side={THREE.BackSide}
         transparent
@@ -80,230 +72,230 @@ function Atmosphere() {
 }
 
 // ---------------------------------------------------------------------------
-// Earth mesh (with texture)
+// Marker HTML content (pure DOM — rendered via drei <Html>)
 // ---------------------------------------------------------------------------
 
-function EarthMesh({ earthRef }: { earthRef: React.RefObject<THREE.Mesh | null> }) {
+function MarkerContent({
+  event,
+  isActive,
+  onSelect,
+}: {
+  event: GlobeEvent;
+  isActive: boolean;
+  onSelect: (e: GlobeEvent) => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const color = CATEGORY_COLOR[event.category] ?? "#F59E0B";
+  const size = isActive || hovered ? 20 : 14;
+
+  return (
+    <div
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onClick={() => onSelect(event)}
+      style={{
+        position: "relative",
+        width: size,
+        height: size,
+        cursor: "pointer",
+        transform: "translate(-50%, -50%)",
+        transition: "width 0.15s, height 0.15s",
+      }}
+    >
+      {/* Outer pulse */}
+      <div
+        style={{
+          position: "absolute",
+          inset: -9,
+          borderRadius: "50%",
+          border: `1px solid ${color}`,
+          opacity: isActive ? 0.55 : 0.28,
+          animation: "globePulse 2.2s ease-out infinite",
+        }}
+      />
+      {/* Inner pulse */}
+      <div
+        style={{
+          position: "absolute",
+          inset: -4,
+          borderRadius: "50%",
+          border: `1px solid ${color}`,
+          opacity: isActive ? 0.35 : 0.18,
+          animation: "globePulse 2.2s ease-out infinite 0.8s",
+        }}
+      />
+      {/* Core */}
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          borderRadius: "50%",
+          background: color,
+          boxShadow: `0 0 ${isActive ? 14 : 7}px ${color}`,
+          opacity: hovered || isActive ? 1 : 0.82,
+          transition: "box-shadow 0.15s, opacity 0.15s",
+        }}
+      />
+      {/* Hover label */}
+      {hovered && !isActive && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 9px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            whiteSpace: "nowrap",
+            fontFamily: "var(--font-mono, monospace)",
+            fontSize: 10,
+            letterSpacing: "0.12em",
+            color: "#e5e7eb",
+            background: "rgba(8,8,14,0.92)",
+            border: `1px solid ${color}45`,
+            padding: "3px 8px",
+            pointerEvents: "none",
+          }}
+        >
+          {event.title}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Earth + markers together in one group so markers track rotation for free
+// ---------------------------------------------------------------------------
+
+interface EarthSystemProps {
+  events: GlobeEvent[];
+  activeEvent: GlobeEvent | null;
+  onEventSelect: (e: GlobeEvent) => void;
+  /** Exposes the rotating group so CameraController can read its world matrix */
+  groupRef: React.RefObject<THREE.Group | null>;
+}
+
+function EarthSystem({ events, activeEvent, onEventSelect, groupRef }: EarthSystemProps) {
+  const meshRef = useRef<THREE.Object3D>(null);
   const texture = useTexture(
     "https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
   );
 
-  // idle rotation — very slow
+  // Idle spin — rotate the GROUP so markers stay in sync automatically
   useFrame((_, delta) => {
-    if (earthRef.current) {
-      earthRef.current.rotation.y += delta * 0.04;
-    }
+    if (groupRef.current) groupRef.current.rotation.y += delta * 0.04;
   });
 
   return (
-    <mesh ref={earthRef} rotation={[0, Math.PI, 0]}>
-      <sphereGeometry args={[1, 96, 96]} />
-      <meshPhongMaterial
-        map={texture}
-        specular={new THREE.Color(0x333333)}
-        shininess={8}
-      />
-    </mesh>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Single globe marker
-// ---------------------------------------------------------------------------
-
-interface MarkerProps {
-  event: GlobeEvent;
-  isActive: boolean;
-  onSelect: (event: GlobeEvent) => void;
-  earthRef: React.RefObject<THREE.Mesh | null>;
-}
-
-function GlobeMarker({ event, isActive, onSelect, earthRef }: MarkerProps) {
-  const { camera } = useThree();
-  const [visible, setVisible] = useState(true);
-  const [hovered, setHovered] = useState(false);
-
-  // World-space position of this marker (on the unit sphere surface)
-  const basePos = latLngToVec3(event.lat, event.lng, 1.015);
-
-  useFrame(() => {
-    if (!earthRef.current) return;
-
-    // Transform base position by earth mesh's rotation
-    const worldPos = basePos.clone().applyQuaternion(earthRef.current.quaternion);
-
-    // Dot product: positive = facing camera, negative = behind globe
-    const toCamera = camera.position.clone().normalize();
-    const markerDir = worldPos.clone().normalize();
-    setVisible(toCamera.dot(markerDir) > 0.05);
-  });
-
-  const color = CATEGORY_COLOR[event.category] ?? "#F59E0B";
-
-  if (!visible) return null;
-
-  // Get current world-space position for <Html> placement
-  const worldPos = earthRef.current
-    ? basePos.clone().applyQuaternion(earthRef.current.quaternion)
-    : basePos;
-
-  return (
-    <Html
-      position={[worldPos.x, worldPos.y, worldPos.z]}
-      zIndexRange={[60, 0]}
-      style={{ pointerEvents: "auto" }}
-      distanceFactor={2.5}
-    >
-      <div
-        onPointerEnter={() => setHovered(true)}
-        onPointerLeave={() => setHovered(false)}
-        onClick={() => onSelect(event)}
-        style={{
-          position: "relative",
-          width: isActive || hovered ? 20 : 14,
-          height: isActive || hovered ? 20 : 14,
-          cursor: "pointer",
-          transform: "translate(-50%, -50%)",
-          transition: "width 0.2s ease, height 0.2s ease",
-        }}
-      >
-        {/* Pulse rings */}
-        <div
-          style={{
-            position: "absolute",
-            inset: -8,
-            borderRadius: "50%",
-            border: `1px solid ${color}`,
-            opacity: isActive ? 0.6 : 0.3,
-            animation: "globePulse 2s ease-out infinite",
-          }}
+    // NO initial rotation — texture and coordinates aligned from the start
+    <group ref={groupRef}>
+      {/* Earth sphere */}
+      <mesh ref={meshRef}>
+        <sphereGeometry args={[1, 96, 96]} />
+        <meshPhongMaterial
+          map={texture}
+          specular={new THREE.Color(0x222222)}
+          shininess={6}
         />
-        <div
-          style={{
-            position: "absolute",
-            inset: -4,
-            borderRadius: "50%",
-            border: `1px solid ${color}`,
-            opacity: isActive ? 0.4 : 0.2,
-            animation: "globePulse 2s ease-out infinite 0.7s",
-          }}
-        />
-        {/* Core dot */}
-        <div
-          style={{
-            width: "100%",
-            height: "100%",
-            borderRadius: "50%",
-            background: color,
-            boxShadow: `0 0 ${isActive ? 12 : 6}px ${color}`,
-            opacity: hovered || isActive ? 1 : 0.85,
-            transition: "box-shadow 0.2s ease, opacity 0.2s ease",
-          }}
-        />
-        {/* Label on hover */}
-        {hovered && !isActive && (
-          <div
-            style={{
-              position: "absolute",
-              top: "calc(100% + 8px)",
-              left: "50%",
-              transform: "translateX(-50%)",
-              whiteSpace: "nowrap",
-              fontFamily: "var(--font-mono, monospace)",
-              fontSize: 10,
-              letterSpacing: "0.1em",
-              color: "#e5e7eb",
-              background: "rgba(10,10,15,0.9)",
-              border: `1px solid ${color}40`,
-              padding: "3px 7px",
-              pointerEvents: "none",
-            }}
+      </mesh>
+
+      {/* Markers as children — inherit group rotation automatically */}
+      {events.map((evt) => {
+        const pos = latLngToVec3(evt.lat, evt.lng, 1.018);
+        return (
+          <Html
+            key={evt.id}
+            position={[pos.x, pos.y, pos.z]}
+            // occlude against the Earth mesh so back-side markers disappear
+            occlude={[meshRef] as any}
+            zIndexRange={[60, 0]}
+            style={{ pointerEvents: "auto" }}
           >
-            {event.title}
-          </div>
-        )}
-      </div>
-    </Html>
+            <MarkerContent
+              event={evt}
+              isActive={activeEvent?.id === evt.id}
+              onSelect={onEventSelect}
+            />
+          </Html>
+        );
+      })}
+    </group>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Camera fly-to controller
+// Camera fly-to
 // ---------------------------------------------------------------------------
 
 interface CameraControllerProps {
   targetEvent: GlobeEvent | null;
   onFlyComplete: () => void;
   orbitRef: React.RefObject<any>;
+  earthGroupRef: React.RefObject<THREE.Group | null>;
 }
 
 function CameraController({
   targetEvent,
   onFlyComplete,
   orbitRef,
+  earthGroupRef,
 }: CameraControllerProps) {
   const { camera } = useThree();
   const flyRef = useRef<{
-    startPos: THREE.Vector3;
-    endPos: THREE.Vector3;
+    start: THREE.Vector3;
+    end: THREE.Vector3;
     t: number;
     done: boolean;
   } | null>(null);
-  const prevEventId = useRef<string | null>(null);
+  const prevId = useRef<string | null>(null);
 
-  // Trigger fly when targetEvent changes
   useEffect(() => {
     if (!targetEvent) {
-      // Fly back to default view
-      if (prevEventId.current !== null) {
+      if (prevId.current !== null) {
         flyRef.current = {
-          startPos: camera.position.clone(),
-          endPos: new THREE.Vector3(0, 0.4, 3.2),
+          start: camera.position.clone(),
+          end: new THREE.Vector3(0, 0.4, 3.2),
           t: 0,
           done: false,
         };
         if (orbitRef.current) orbitRef.current.enabled = false;
       }
-      prevEventId.current = null;
+      prevId.current = null;
       return;
     }
+    if (targetEvent.id === prevId.current) return;
+    prevId.current = targetEvent.id;
 
-    if (targetEvent.id === prevEventId.current) return;
-    prevEventId.current = targetEvent.id;
+    // Compute current world position of the marker, accounting for globe rotation
+    const localPos = latLngToVec3(targetEvent.lat, targetEvent.lng, 1);
+    let worldDir = localPos.clone();
+    if (earthGroupRef.current) {
+      earthGroupRef.current.updateMatrixWorld();
+      worldDir = localPos.clone().applyMatrix4(earthGroupRef.current.matrixWorld);
+    }
 
-    const markerPos = latLngToVec3(targetEvent.lat, targetEvent.lng, 1);
-    const camDist = 2.0;
-    const endPos = markerPos.normalize().multiplyScalar(camDist);
-    endPos.y += 0.15; // slight elevation
+    // Camera sits 2.1 units from center, slightly elevated, facing the event
+    const end = worldDir.clone().normalize().multiplyScalar(2.1);
+    end.y += 0.1;
 
     flyRef.current = {
-      startPos: camera.position.clone(),
-      endPos,
+      start: camera.position.clone(),
+      end,
       t: 0,
       done: false,
     };
     if (orbitRef.current) orbitRef.current.enabled = false;
-  }, [targetEvent, camera, orbitRef]);
+  }, [targetEvent, camera, orbitRef, earthGroupRef]);
 
   useFrame((_, delta) => {
     if (!flyRef.current || flyRef.current.done) return;
-
     flyRef.current.t = Math.min(1, flyRef.current.t + delta * 0.65);
     const ease = easeInOutCubic(flyRef.current.t);
-
-    camera.position.lerpVectors(
-      flyRef.current.startPos,
-      flyRef.current.endPos,
-      ease
-    );
+    camera.position.lerpVectors(flyRef.current.start, flyRef.current.end, ease);
     camera.lookAt(0, 0, 0);
-
     if (flyRef.current.t >= 1) {
       flyRef.current.done = true;
       onFlyComplete();
-      if (!targetEvent && orbitRef.current) {
-        orbitRef.current.enabled = true;
-      }
+      if (!targetEvent && orbitRef.current) orbitRef.current.enabled = true;
     }
   });
 
@@ -311,76 +303,48 @@ function CameraController({
 }
 
 // ---------------------------------------------------------------------------
-// Scene interior (needs to be inside <Canvas>)
+// Scene (inside <Canvas>)
 // ---------------------------------------------------------------------------
-
-interface SceneProps {
-  events: GlobeEvent[];
-  activeEvent: GlobeEvent | null;
-  onEventSelect: (event: GlobeEvent) => void;
-  onFlyComplete: () => void;
-}
 
 function Scene({
   events,
   activeEvent,
   onEventSelect,
   onFlyComplete,
-}: SceneProps) {
-  const earthRef = useRef<THREE.Mesh>(null);
+}: {
+  events: GlobeEvent[];
+  activeEvent: GlobeEvent | null;
+  onEventSelect: (e: GlobeEvent) => void;
+  onFlyComplete: () => void;
+}) {
+  const earthGroupRef = useRef<THREE.Group>(null);
   const orbitRef = useRef<any>(null);
 
   return (
     <>
-      {/* Lighting */}
-      <ambientLight intensity={0.35} />
-      <directionalLight
-        position={[5, 3, 5]}
-        intensity={1.1}
-        color="#fff5e0"
-      />
-      <directionalLight
-        position={[-8, -2, -4]}
-        intensity={0.12}
-        color="#3060ff"
-      />
+      <ambientLight intensity={0.3} />
+      <directionalLight position={[5, 3, 5]} intensity={1.1} color="#fff5e0" />
+      <directionalLight position={[-8, -2, -4]} intensity={0.1} color="#3060ff" />
 
-      {/* Stars */}
-      <Stars
-        radius={90}
-        depth={60}
-        count={6000}
-        factor={3.5}
-        saturation={0}
-        fade
-        speed={0.4}
-      />
+      <Stars radius={90} depth={60} count={6000} factor={3.5} saturation={0} fade speed={0.4} />
 
-      {/* Earth */}
       <Suspense fallback={null}>
-        <EarthMesh earthRef={earthRef} />
+        <EarthSystem
+          events={events}
+          activeEvent={activeEvent}
+          onEventSelect={onEventSelect}
+          groupRef={earthGroupRef}
+        />
         <Atmosphere />
-
-        {/* Markers */}
-        {events.map((evt) => (
-          <GlobeMarker
-            key={evt.id}
-            event={evt}
-            isActive={activeEvent?.id === evt.id}
-            onSelect={onEventSelect}
-            earthRef={earthRef}
-          />
-        ))}
       </Suspense>
 
-      {/* Camera fly-to */}
       <CameraController
         targetEvent={activeEvent}
         onFlyComplete={onFlyComplete}
         orbitRef={orbitRef}
+        earthGroupRef={earthGroupRef}
       />
 
-      {/* Orbit controls */}
       <OrbitControls
         ref={orbitRef}
         enableZoom={false}
@@ -397,22 +361,20 @@ function Scene({
 }
 
 // ---------------------------------------------------------------------------
-// Public export: full Canvas wrapper
+// Public export
 // ---------------------------------------------------------------------------
-
-interface GlobeSceneProps {
-  events: GlobeEvent[];
-  activeEvent: GlobeEvent | null;
-  onEventSelect: (event: GlobeEvent) => void;
-  onFlyComplete: () => void;
-}
 
 export default function GlobeScene({
   events,
   activeEvent,
   onEventSelect,
   onFlyComplete,
-}: GlobeSceneProps) {
+}: {
+  events: GlobeEvent[];
+  activeEvent: GlobeEvent | null;
+  onEventSelect: (e: GlobeEvent) => void;
+  onFlyComplete: () => void;
+}) {
   return (
     <Canvas
       camera={{ position: [0, 0.4, 3.2], fov: 42, near: 0.1, far: 1000 }}
