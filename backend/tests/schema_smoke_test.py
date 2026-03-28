@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from pydantic import ValidationError
@@ -107,7 +107,7 @@ def test_schema_imports_and_valid_payloads() -> None:
         total_ticks=30,
         agents=[agent_summary],
         tick_data=[tick_snapshot],
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
         completed_at=None,
     )
 

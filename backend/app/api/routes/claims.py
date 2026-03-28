@@ -1,14 +1,16 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.session import AnalysisSession
 from app.schemas.market import ClaimsGenerateResponse
-from app.services.claims_generator import claims_generator
-
+from app.services.claims_generator import (
+    ClaimsGeneratorDependencyError,
+    ClaimsGeneratorInputError,
+    claims_generator,
+)
 
 router = APIRouter(prefix="/sessions", tags=["claims"])
 
@@ -18,24 +20,29 @@ async def generate_claims(
     market_id: UUID,
     db: AsyncSession = Depends(get_db),
 ) -> ClaimsGenerateResponse:
-    session_stmt = select(AnalysisSession).where(AnalysisSession.market_id == market_id)
-    session_result = await db.execute(session_stmt)
-    analysis_session = session_result.scalar_one_or_none()
-
-    if analysis_session is None:
+    try:
+        return await claims_generator.generate(db=db, market_id=market_id)
+    except ClaimsGeneratorInputError as exc:
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"detail": "Analysis session not found for market", "code": "SESSION_NOT_FOUND"},
-        )
-
-    try:
-        return await claims_generator.generate(
-            db=db,
-            market_id=market_id,
-            session_id=analysis_session.id,
-        )
+            detail={"detail": str(exc), "code": "SESSION_NOT_FOUND"},
+        ) from exc
+    except ClaimsGeneratorDependencyError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"detail": str(exc), "code": "CLAIMS_GENERATION_UNAVAILABLE"},
+        ) from exc
     except ValueError as exc:
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"detail": str(exc), "code": "CLAIMS_GENERATION_FAILED"},
+        ) from exc
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"detail": "Database write failed", "code": "DATABASE_ERROR"},
         ) from exc

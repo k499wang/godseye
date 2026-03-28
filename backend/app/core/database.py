@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -15,10 +16,23 @@ class Base(DeclarativeBase):
     pass
 
 
+def _build_engine_url() -> str:
+    database_url = settings.database_url
+    if not settings.db_ssl_require:
+        return database_url
+
+    parts = urlsplit(database_url)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    if "supabase.co" in parts.netloc and "ssl" not in query and "sslmode" not in query:
+        query["ssl"] = "require"
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+
 engine: AsyncEngine = create_async_engine(
-    settings.database_url,
+    _build_engine_url(),
     echo=settings.debug,
     future=True,
+    pool_pre_ping=True,
 )
 
 SessionLocal = async_sessionmaker(
