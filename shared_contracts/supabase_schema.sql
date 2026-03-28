@@ -11,14 +11,6 @@
 
 create extension if not exists pgcrypto;
 
-drop trigger if exists set_markets_updated_at on public.markets;
-drop trigger if exists set_analysis_sessions_updated_at on public.analysis_sessions;
-drop trigger if exists set_claims_updated_at on public.claims;
-drop trigger if exists set_simulations_updated_at on public.simulations;
-drop trigger if exists set_agents_updated_at on public.agents;
-drop trigger if exists set_claim_shares_updated_at on public.claim_shares;
-drop trigger if exists set_reports_updated_at on public.reports;
-
 drop function if exists public.set_updated_at();
 
 drop table if exists public.reports cascade;
