@@ -106,11 +106,16 @@ create table public.simulations (
   market_id uuid not null references public.markets(id) on delete cascade,
   status public.simulation_status not null default 'pending',
   current_tick integer not null default 0 check (current_tick >= 0 and current_tick <= 30),
-  total_ticks integer not null default 30 check (total_ticks > 0 and total_ticks <= 30),
+  total_ticks integer not null default 30 check (total_ticks = 30),
   tick_data jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
-  completed_at timestamptz null
+  completed_at timestamptz null,
+  check (jsonb_typeof(tick_data) = 'array'),
+  check (
+    (status = 'complete' and completed_at is not null)
+    or (status <> 'complete')
+  )
 );
 
 comment on table public.simulations is 'Simulation state; tick_data stores TickSnapshot objects.';
@@ -126,7 +131,9 @@ create table public.agents (
   professional_background jsonb not null default '{}'::jsonb,
   trust_scores jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default timezone('utc', now()),
-  updated_at timestamptz not null default timezone('utc', now())
+  updated_at timestamptz not null default timezone('utc', now()),
+  check (jsonb_typeof(professional_background) = 'object'),
+  check (jsonb_typeof(trust_scores) = 'object')
 );
 
 comment on table public.agents is 'Agents generated during world-building. trust_scores is a JSON object keyed by other agent ids.';
@@ -158,7 +165,8 @@ create table public.reports (
   trust_insights text not null,
   recommendation text not null,
   created_at timestamptz not null default timezone('utc', now()),
-  updated_at timestamptz not null default timezone('utc', now())
+  updated_at timestamptz not null default timezone('utc', now()),
+  check (jsonb_typeof(key_drivers) = 'array')
 );
 
 comment on table public.reports is 'Final generated report for a completed simulation.';
