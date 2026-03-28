@@ -123,7 +123,7 @@ class ClaimsGeneratorService:
             .where(Market.id == market_id)
         )
         result = await db.execute(stmt)
-        row = self._result_one_or_none(result)
+        row = result.one_or_none()
         if row is None:
             raise ClaimsGeneratorInputError("Analysis session not found for market")
         market, analysis_session = row
@@ -142,10 +142,7 @@ class ClaimsGeneratorService:
             .order_by(Claim.created_at.asc(), Claim.id.asc())
         )
         result = await db.execute(stmt)
-        scalars = getattr(result, "scalars", None)
-        if callable(scalars):
-            return list(scalars().all())
-        return []
+        return list(result.scalars().all())
 
     async def _load_market(
         self,
@@ -160,35 +157,10 @@ class ClaimsGeneratorService:
             .where(Market.id == market_id, AnalysisSession.id == session_id)
         )
         result = await db.execute(stmt)
-        market = self._result_scalar_one_or_none(result)
+        market = result.scalar_one_or_none()
         if market is None:
             raise ClaimsGeneratorInputError("Market/session combination not found")
         return market
-
-    def _result_one_or_none(self, result: object):
-        one_or_none = getattr(result, "one_or_none", None)
-        if callable(one_or_none):
-            return one_or_none()
-
-        scalar_one_or_none = getattr(result, "scalar_one_or_none", None)
-        if callable(scalar_one_or_none):
-            return scalar_one_or_none()
-
-        raise TypeError("Query result does not support one_or_none access")
-
-    def _result_scalar_one_or_none(self, result: object):
-        scalar_one_or_none = getattr(result, "scalar_one_or_none", None)
-        if callable(scalar_one_or_none):
-            return scalar_one_or_none()
-
-        one_or_none = getattr(result, "one_or_none", None)
-        if callable(one_or_none):
-            row = one_or_none()
-            if isinstance(row, tuple):
-                return row[0] if row else None
-            return row
-
-        raise TypeError("Query result does not support scalar_one_or_none access")
 
     def _build_claims_prompt(self, market: Market) -> str:
         return (
