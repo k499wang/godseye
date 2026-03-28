@@ -25,7 +25,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.core.llm_client import llm_client, MODEL_GEMINI_PRO, MODEL_K2_THINK
+from app.core.llm_client import llm_client, MODEL_GEMINI_FLASH, MODEL_K2_THINK
 from app.services.simulation_runner import SimulationResult
 
 logger = logging.getLogger(__name__)
@@ -235,7 +235,7 @@ Return ONLY valid JSON."""
 
         response = await llm_client.complete(
             prompt=prompt,
-            model=MODEL_GEMINI_PRO,
+            model=MODEL_GEMINI_FLASH,
             response_format="json",
         )
 
@@ -312,7 +312,7 @@ Return ONLY valid JSON with exactly these fields:
 
         response = await llm_client.complete(
             prompt=prompt,
-            model=MODEL_GEMINI_PRO,
+            model=MODEL_GEMINI_FLASH,
             response_format="json",
         )
 
