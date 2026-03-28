@@ -50,8 +50,8 @@ const atmVert = /* glsl */ `
 const atmFrag = /* glsl */ `
   varying vec3 vNormal;
   void main() {
-    float intensity = pow(0.72 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.8);
-    gl_FragColor = vec4(0.18, 0.52, 1.0, 1.0) * intensity * 0.7;
+    float intensity = pow(0.72 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 3.5);
+    gl_FragColor = vec4(0.18, 0.52, 1.0, 1.0) * intensity * 0.45;
   }
 `;
 
@@ -335,9 +335,10 @@ function Scene({
 
   return (
     <>
-      <ambientLight intensity={1.1} />
-      <directionalLight position={[5, 3, 5]} intensity={2.0} color="#fff8f0" />
-      <directionalLight position={[-8, -2, -4]} intensity={0.4} color="#4080ff" />
+      <ambientLight intensity={1.8} />
+      <directionalLight position={[5, 3, 5]} intensity={2.8} color="#fff8f0" />
+      <directionalLight position={[-8, -2, -4]} intensity={0.6} color="#4080ff" />
+      <directionalLight position={[0, 5, -5]} intensity={1.0} color="#ffffff" />
 
       <Stars radius={90} depth={60} count={6000} factor={3.5} saturation={0} fade speed={0.4} />
 
