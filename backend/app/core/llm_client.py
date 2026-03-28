@@ -278,6 +278,9 @@ class LLMClient:
                 lines = lines[:-1]
             cleaned = "\n".join(lines).strip()
 
+        if not cleaned:
+            raise ValueError("LLM returned an empty response for a JSON-format request")
+
         parsed = json.loads(cleaned)
         return json.dumps(parsed)
 

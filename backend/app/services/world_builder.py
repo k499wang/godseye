@@ -237,13 +237,12 @@ Return a JSON array of objects, each with exactly these fields:
 
 Return ONLY the JSON array, nothing else."""
 
-        response = await llm_client.complete(
-            prompt=prompt,
-            model=MODEL_K2_THINK,
-            response_format="json",
-        )
-
         try:
+            response = await llm_client.complete(
+                prompt=prompt,
+                model=MODEL_K2_THINK,
+                response_format="json",
+            )
             data = json.loads(response)
             if not isinstance(data, list):
                 data = data.get("profiles", data.get("results", []))
@@ -256,7 +255,7 @@ Return ONLY the JSON array, nothing else."""
                 )
                 for p in data[:TOTAL_AGENTS]
             ]
-        except (json.JSONDecodeError, AttributeError):
+        except Exception:
             return self._fallback_profiles()
 
     @staticmethod
