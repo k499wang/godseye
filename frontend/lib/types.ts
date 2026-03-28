@@ -113,6 +113,23 @@ export interface ReportResponse {
   recommendation: string;
 }
 
+export interface MarketBrowseItem {
+  slug: string;
+  title: string;
+  description: string;
+  url: string;
+  image: string | null;
+  volume: number;
+  volume24hr: number;
+  probability: number | null;
+}
+
+export interface MarketBrowseResponse {
+  markets: MarketBrowseItem[];
+  cached: boolean;
+  cache_age_seconds: number;
+}
+
 export interface ApiError {
   detail: string;
   code: string | null;

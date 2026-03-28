@@ -4,6 +4,7 @@ import type {
   ClaimsGenerateResponse,
   SimulationResponse,
   ReportResponse,
+  MarketBrowseResponse,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5001";
@@ -46,5 +47,15 @@ export async function getSimulation(simulationId: string): Promise<SimulationRes
 
 export async function getReport(simulationId: string): Promise<ReportResponse> {
   const res = await client.get<ReportResponse>(`/api/reports/${simulationId}`);
+  return res.data;
+}
+
+export async function browseMarkets(): Promise<MarketBrowseResponse> {
+  const res = await client.get<MarketBrowseResponse>("/api/markets/browse");
+  return res.data;
+}
+
+export async function refreshMarkets(): Promise<MarketBrowseResponse> {
+  const res = await client.post<MarketBrowseResponse>("/api/markets/refresh");
   return res.data;
 }
