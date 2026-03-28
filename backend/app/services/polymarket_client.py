@@ -158,6 +158,18 @@ class PolymarketClient:
                 detail="Unexpected Polymarket market payload inside event response",
                 code="UPSTREAM_BAD_RESPONSE",
             )
+
+        # Inject parent event context so the sub-market question isn't opaque
+        event_title = event_payload.get("title") or event_payload.get("question") or ""
+        if event_title:
+            first_market["_event_title"] = str(event_title).strip()
+            all_outcomes = [
+                str(m.get("question") or m.get("title") or "").strip()
+                for m in markets
+                if isinstance(m, dict)
+            ]
+            first_market["_event_outcomes"] = [o for o in all_outcomes if o]
+
         return first_market
 
     def _normalize_market_payload(
@@ -168,6 +180,20 @@ class PolymarketClient:
     ) -> PolymarketMarketSnapshot:
         polymarket_id = str(payload.get("slug") or payload.get("id") or fallback_slug).strip()
         question = str(payload.get("question") or payload.get("title") or "").strip()
+
+        # If this sub-market came from a multi-outcome event, prepend event
+        # context so downstream consumers (claims generator, agents) understand
+        # what the market is actually about.
+        event_title = payload.get("_event_title")
+        event_outcomes = payload.get("_event_outcomes")
+        if event_title and event_title != question:
+            outcomes_note = ""
+            if event_outcomes and len(event_outcomes) > 1:
+                outcomes_note = (
+                    f"\nOther outcomes in this event: {', '.join(event_outcomes)}"
+                )
+            question = f"[Event: {event_title}] {question}{outcomes_note}"
+
         resolution_criteria = str(
             payload.get("resolution_criteria")
             or payload.get("description")
