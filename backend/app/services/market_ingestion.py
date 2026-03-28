@@ -1,4 +1,5 @@
 from decimal import Decimal
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,7 +55,7 @@ class MarketIngestionService:
         )
         return result.scalar_one_or_none()
 
-    async def _find_session(self, *, db: AsyncSession, market_id) -> AnalysisSession | None:
+    async def _find_session(self, *, db: AsyncSession, market_id: UUID) -> AnalysisSession | None:
         result = await db.execute(
             select(AnalysisSession).where(AnalysisSession.market_id == market_id)
         )

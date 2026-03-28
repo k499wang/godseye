@@ -61,16 +61,20 @@ async def run_simulation(
         await _update_sim_status(db, simulation_id, "building")
 
         # --- Phase 2: Build World ---
-        logger.info("Building world for simulation %s", simulation_id)
-        agents = await world_builder.build_world(
-            session_id=session_id,
-            simulation_id=simulation_id,
-            market_question=market_question,
-        )
-        logger.info("World built: %d agents created", len(agents))
+        agents = await _load_agents_from_db(db, simulation_id)
+        if agents:
+            logger.info("Loaded %d existing agents for simulation %s", len(agents), simulation_id)
+        else:
+            logger.info("Building world for simulation %s", simulation_id)
+            agents = await world_builder.build_world(
+                session_id=session_id,
+                simulation_id=simulation_id,
+                market_question=market_question,
+            )
+            logger.info("World built: %d agents created", len(agents))
 
-        # Persist agents to DB
-        await _persist_agents(db, simulation_id, agents)
+            # Persist agents to DB
+            await _persist_agents(db, simulation_id, agents)
 
         # --- Phase 3: Prepare Claims ---
         claim_objects: list[Claim] | None = None
@@ -181,6 +185,48 @@ async def _persist_agents(db, simulation_id: str, agents) -> None:
 async def _load_claims_from_db(db, session_id: str) -> list[Claim] | None:
     """Load claims from DB. Returns None if DB unavailable or no claims found."""
     if not db:
+        return None
+
+
+async def _load_agents_from_db(db, simulation_id: str):
+    """Load existing persisted agents if build-world already ran."""
+    if not db:
+        return None
+    try:
+        from sqlalchemy import select
+        from app.models.agent import Agent as AgentModel
+        from app.services.world_builder import AgentRecord
+
+        result = await db.execute(
+            select(AgentModel).where(AgentModel.simulation_id == UUID(simulation_id))
+        )
+        db_agents = result.scalars().all()
+        if not db_agents:
+            return None
+
+        return [
+            AgentRecord(
+                id=str(agent.id),
+                simulation_id=str(agent.simulation_id),
+                name=agent.name,
+                archetype=agent.archetype,
+                initial_belief=float(agent.initial_belief),
+                current_belief=float(agent.current_belief),
+                confidence=float(agent.confidence),
+                professional_background=dict(agent.professional_background or {}),
+                trust_scores={
+                    str(key): float(value)
+                    for key, value in (agent.trust_scores or {}).items()
+                },
+            )
+            for agent in db_agents
+        ]
+    except Exception as e:
+        logger.warning("Failed to load agents from DB: %s", e)
+        try:
+            await db.rollback()
+        except Exception:
+            pass
         return None
     try:
         from sqlalchemy import select
