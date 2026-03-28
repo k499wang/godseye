@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { forwardRef, useEffect, useRef, useState, useCallback, type CSSProperties } from "react";
 import { useGlobe } from "./GlobeContext";
 
 function fmt(d: Date): string {
@@ -11,7 +11,14 @@ function fmt(d: Date): string {
   });
 }
 
-export function TimelineSlider({ rightOffset = 0 }: { rightOffset?: number }) {
+export const TimelineSlider = forwardRef<
+  HTMLDivElement,
+  {
+    rightOffset?: number;
+    wide?: boolean;
+    style?: CSSProperties;
+  }
+>(function TimelineSlider({ rightOffset = 0, wide = false, style }, ref) {
   const { timelineMin, timelineMax, timelinePosition, setTimelinePosition } =
     useGlobe();
   const [isPlaying, setIsPlaying] = useState(false);
@@ -34,7 +41,9 @@ export function TimelineSlider({ rightOffset = 0 }: { rightOffset?: number }) {
   const startPlay = useCallback(() => {
     if (isPlaying) return;
     setIsPlaying(true);
-    if (currentMs >= maxMs) setTimelinePosition(new Date(minMs));
+    if (currentMs >= maxMs) {
+      setTimelinePosition(new Date(minMs), { preserveAutoSpin: true });
+    }
   }, [isPlaying, currentMs, maxMs, minMs, setTimelinePosition]);
 
   const currentMsRef = useRef(currentMs);
@@ -47,9 +56,9 @@ export function TimelineSlider({ rightOffset = 0 }: { rightOffset?: number }) {
       const next = currentMsRef.current + step;
       if (next >= maxMs) {
         setIsPlaying(false);
-        setTimelinePosition(new Date(maxMs));
+        setTimelinePosition(new Date(maxMs), { preserveAutoSpin: true });
       } else {
-        setTimelinePosition(new Date(next));
+        setTimelinePosition(new Date(next), { preserveAutoSpin: true });
       }
     }, 150);
     return () => {
@@ -61,101 +70,141 @@ export function TimelineSlider({ rightOffset = 0 }: { rightOffset?: number }) {
 
   return (
     <div
-      className="absolute bottom-0 left-0 z-20 px-5 pb-5 pt-8"
+      ref={ref}
+      className="absolute left-0 z-20 px-5"
       style={{
-        right: rightOffset,
-        background:
-          "linear-gradient(to top, rgba(5,5,9,0.97) 0%, transparent 100%)",
+        right: rightOffset + 20,
+        bottom: 20,
+        transition: "right 0.38s cubic-bezier(0.4, 0, 0.2, 1)",
+        ...style,
       }}
     >
-      {/* Date labels */}
       <div
-        className="flex justify-between mb-2 px-1"
         style={{
-          fontFamily: "var(--font-mono)",
-          fontSize: 9,
-          letterSpacing: "0.1em",
-          color: "var(--text-muted)",
+          width: wide ? "100%" : "min(860px, 100%)",
+          background: "rgba(9, 13, 21, 0.86)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 26,
+          padding: "14px 16px 16px",
+          backdropFilter: "blur(18px)",
+          boxShadow: "0 20px 50px rgba(0,0,0,0.28)",
         }}
       >
-        <span>{fmt(timelineMin)}</span>
-        {timelinePosition && (
-          <span style={{ color: "var(--text-secondary)" }}>
-            {fmt(timelinePosition)}
-          </span>
-        )}
-        <span>{fmt(timelineMax)}</span>
-      </div>
-
-      {/* Controls */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={isPlaying ? stopPlay : startPlay}
-          aria-label={isPlaying ? "Pause" : "Play"}
+        <div
+          className="mb-3 flex items-center justify-between gap-3"
           style={{
-            width: 28,
-            height: 28,
-            flexShrink: 0,
-            background: "var(--bg-raised)",
-            border: "1px solid var(--border-strong)",
-            color: "var(--text-primary)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
+            fontFamily: "var(--font-mono)",
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
           }}
         >
-          {isPlaying ? (
-            <svg width="11" height="11" fill="currentColor" viewBox="0 0 20 20">
-              <rect x="5" y="4" width="3" height="12" />
-              <rect x="12" y="4" width="3" height="12" />
-            </svg>
-          ) : (
-            <svg width="11" height="11" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+          <span style={{ color: "var(--text-muted)" }}>Event timeline</span>
+          {timelinePosition && (
+            <span
+              style={{
+                color: "var(--text-primary)",
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 999,
+                padding: "6px 10px",
+              }}
+            >
+              {fmt(timelinePosition)}
+            </span>
           )}
-        </button>
+        </div>
 
-        <div
-          className="relative flex-1"
-          style={{ height: 20, display: "flex", alignItems: "center" }}
-        >
-          {/* Track */}
-          <div
-            className="absolute"
+        <div className="flex items-center gap-4">
+          <button
+            onClick={isPlaying ? stopPlay : startPlay}
+            aria-label={isPlaying ? "Pause" : "Play"}
             style={{
-              top: "50%",
-              left: 0,
-              right: 0,
-              height: 1,
-              background: "var(--border-strong)",
-              transform: "translateY(-50%)",
-              pointerEvents: "none",
+              width: 42,
+              height: 42,
+              flexShrink: 0,
+              background: isPlaying ? "rgba(245,158,11,0.12)" : "rgba(255,255,255,0.05)",
+              border: `1px solid ${isPlaying ? "rgba(245,158,11,0.35)" : "rgba(255,255,255,0.14)"}`,
+              color: isPlaying ? "var(--accent)" : "var(--text-primary)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              borderRadius: 999,
+              boxShadow: isPlaying ? "0 0 18px rgba(245,158,11,0.15)" : "none",
+              transition: "all 0.18s ease",
             }}
-          />
-          {/* Progress fill */}
-          <div
-            className="absolute"
-            style={{
-              top: "50%",
-              left: 0,
-              width: `${pct}%`,
-              height: 1,
-              background: "var(--text-secondary)",
-              transform: "translateY(-50%)",
-              pointerEvents: "none",
-            }}
-          />
-          <input
-            type="range"
-            min={minMs}
-            max={maxMs}
-            value={currentMs}
-            onChange={(e) => setTimelinePosition(new Date(Number(e.target.value)))}
-            className="relative w-full bg-transparent cursor-pointer"
-            style={{ WebkitAppearance: "none", appearance: "none", height: 20, margin: 0 }}
-          />
+          >
+            {isPlaying ? (
+              <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
+                <rect x="5" y="4" width="3" height="12" rx="0.8" />
+                <rect x="12" y="4" width="3" height="12" rx="0.8" />
+              </svg>
+            ) : (
+              <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            )}
+          </button>
+
+          <div className="min-w-0 flex-1">
+            <div
+              className="mb-2 flex justify-between gap-3"
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 10,
+                letterSpacing: "0.12em",
+                color: "var(--text-muted)",
+                textTransform: "uppercase",
+              }}
+            >
+              <span>{fmt(timelineMin)}</span>
+              <span>{fmt(timelineMax)}</span>
+            </div>
+
+            <div
+              className="relative flex items-center"
+              style={{ height: 28 }}
+            >
+              <div
+                className="absolute"
+                style={{
+                  top: "50%",
+                  left: 0,
+                  right: 0,
+                  height: 4,
+                  borderRadius: 999,
+                  background: "rgba(255,255,255,0.12)",
+                  transform: "translateY(-50%)",
+                  pointerEvents: "none",
+                }}
+              />
+              <div
+                className="absolute"
+                style={{
+                  top: "50%",
+                  left: 0,
+                  width: `${pct}%`,
+                  height: 4,
+                  borderRadius: 999,
+                  background: "linear-gradient(90deg, rgba(245,158,11,0.95) 0%, rgba(251,191,36,0.72) 100%)",
+                  transform: "translateY(-50%)",
+                  pointerEvents: "none",
+                  boxShadow: "0 0 14px rgba(245,158,11,0.25)",
+                }}
+              />
+              <input
+                type="range"
+                min={minMs}
+                max={maxMs}
+                value={currentMs}
+                onChange={(e) => setTimelinePosition(new Date(Number(e.target.value)))}
+                className="relative w-full cursor-pointer bg-transparent"
+                style={{ WebkitAppearance: "none", appearance: "none", height: 28, margin: 0 }}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -163,22 +212,24 @@ export function TimelineSlider({ rightOffset = 0 }: { rightOffset?: number }) {
         input[type='range']::-webkit-slider-thumb {
           -webkit-appearance: none;
           appearance: none;
-          width: 8px;
+          width: 16px;
           height: 16px;
-          border-radius: 0;
-          background: #c0c0c0;
-          border: 1px solid #444444;
+          border-radius: 999px;
+          background: #f8fafc;
+          border: 3px solid #f59e0b;
+          box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.12);
           cursor: pointer;
         }
         input[type='range']::-moz-range-thumb {
-          width: 8px;
+          width: 16px;
           height: 16px;
-          border-radius: 0;
-          background: #c0c0c0;
-          border: 1px solid #444444;
+          border-radius: 999px;
+          background: #f8fafc;
+          border: 3px solid #f59e0b;
+          box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.12);
           cursor: pointer;
         }
       `}</style>
     </div>
   );
-}
+});

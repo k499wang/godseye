@@ -33,93 +33,105 @@ export function BeliefChart({
   totalTicks,
   onTickSelect,
 }: BeliefChartProps) {
-  // Build chart data — one row per tick
   const data: ChartDataPoint[] = [];
 
-  for (let t = 1; t <= Math.max(tickData.length, 1); t++) {
-    const snap = tickData.find((s) => s.tick === t);
-    const row: ChartDataPoint = { tick: t };
+  for (let tick = 1; tick <= Math.max(tickData.length, 1); tick++) {
+    const snapshot = tickData.find((entry) => entry.tick === tick);
+    const row: ChartDataPoint = { tick };
+
     agents.forEach((agent) => {
-      if (snap) {
-        const state = snap.agent_states.find((s) => s.agent_id === agent.id);
-        row[agent.id] = state ? Math.round(state.belief * 100) / 100 : agent.initial_belief;
+      if (snapshot) {
+        const state = snapshot.agent_states.find((entry) => entry.agent_id === agent.id);
+        row[agent.id] = state
+          ? Math.round(state.belief * 100) / 100
+          : agent.initial_belief;
       } else {
         row[agent.id] = agent.initial_belief;
       }
     });
+
     data.push(row);
   }
 
   return (
-    <div className="w-full h-full">
+    <div className="h-full w-full rounded-[24px] border border-white/8 bg-[rgba(255,255,255,0.02)] p-2">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart
           data={data}
-          margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
-          onClick={(e) => {
-            if (e?.activeLabel && onTickSelect) {
-              onTickSelect(Number(e.activeLabel));
+          margin={{ top: 14, right: 20, left: 6, bottom: 8 }}
+          onClick={(event) => {
+            if (event?.activeLabel && onTickSelect) {
+              onTickSelect(Number(event.activeLabel));
             }
           }}
         >
           <CartesianGrid
-            strokeDasharray="2 4"
-            stroke="rgba(255,255,255,0.06)"
+            strokeDasharray="3 5"
+            stroke="rgba(255,255,255,0.08)"
             vertical={false}
           />
           <XAxis
             dataKey="tick"
-            tick={{ fill: "#6b7280", fontSize: 10, fontFamily: "var(--font-mono)" }}
+            tick={{ fill: "#8b97ab", fontSize: 11, fontFamily: "var(--font-mono)" }}
             tickLine={false}
-            axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
+            axisLine={{ stroke: "rgba(255,255,255,0.1)" }}
             label={{
               value: "TICK",
               position: "insideBottomRight",
-              offset: -4,
-              fill: "#4b5563",
-              fontSize: 9,
+              offset: -2,
+              fill: "#8b97ab",
+              fontSize: 10,
               fontFamily: "var(--font-mono)",
             }}
+            minTickGap={Math.max(0, Math.floor(totalTicks / 6))}
           />
           <YAxis
             domain={[0, 1]}
             ticks={[0, 0.25, 0.5, 0.75, 1]}
-            tickFormatter={(v) => `${Math.round(v * 100)}%`}
-            tick={{ fill: "#6b7280", fontSize: 10, fontFamily: "var(--font-mono)" }}
+            tickFormatter={(value) => `${Math.round(value * 100)}%`}
+            tick={{ fill: "#8b97ab", fontSize: 11, fontFamily: "var(--font-mono)" }}
             tickLine={false}
             axisLine={false}
-            width={38}
+            width={46}
           />
           <Tooltip
             contentStyle={{
-              background: "#0d0d14",
-              border: "1px solid rgba(245,158,11,0.3)",
-              borderRadius: 0,
-              fontFamily: "var(--font-mono)",
+              background: "rgba(10, 14, 22, 0.98)",
+              border: "1px solid rgba(245,158,11,0.26)",
+              borderRadius: 18,
+              boxShadow: "0 18px 50px rgba(0,0,0,0.32)",
+              fontFamily: "var(--font-sans)",
+              fontSize: 13,
+              padding: "12px 14px",
+            }}
+            itemStyle={{ color: "#edf2f8" }}
+            labelStyle={{
+              color: "#f59e0b",
+              marginBottom: 8,
               fontSize: 11,
+              fontFamily: "var(--font-mono)",
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
             }}
-            labelStyle={{ color: "#F59E0B", marginBottom: 4, fontSize: 10 }}
             formatter={(value, name) => {
-              const numVal = typeof value === "number" ? value : 0;
-              const nameStr = typeof name === "string" ? name : String(name ?? "");
-              const agent = agents.find((a) => a.id === nameStr);
-              return [`${Math.round(numVal * 100)}%`, agent?.name ?? nameStr] as [string, string];
+              const numeric = typeof value === "number" ? value : 0;
+              const nameValue = typeof name === "string" ? name : String(name ?? "");
+              const agent = agents.find((entry) => entry.id === nameValue);
+              return [`${Math.round(numeric * 100)}%`, agent?.name ?? nameValue] as [string, string];
             }}
-            labelFormatter={(label) => `TICK ${label}`}
-            cursor={{ stroke: "rgba(245,158,11,0.2)", strokeWidth: 1 }}
+            labelFormatter={(label) => `Tick ${label}`}
+            cursor={{ stroke: "rgba(245,158,11,0.28)", strokeWidth: 1.5 }}
           />
-          {/* 50% reference line */}
           <ReferenceLine
             y={0.5}
-            stroke="rgba(255,255,255,0.12)"
-            strokeDasharray="4 4"
+            stroke="rgba(255,255,255,0.14)"
+            strokeDasharray="5 5"
           />
-          {/* Current tick reference */}
           {currentTick > 0 && (
             <ReferenceLine
               x={currentTick}
-              stroke="rgba(245,158,11,0.5)"
-              strokeWidth={1.5}
+              stroke="rgba(245,158,11,0.6)"
+              strokeWidth={1.75}
             />
           )}
           {agents.map((agent) => (
@@ -128,12 +140,12 @@ export function BeliefChart({
               type="monotone"
               dataKey={agent.id}
               stroke={ARCHETYPE_COLORS[agent.archetype] ?? "#ffffff"}
-              strokeWidth={1.5}
+              strokeWidth={2}
               dot={false}
               activeDot={{
-                r: 4,
+                r: 5,
                 fill: ARCHETYPE_COLORS[agent.archetype] ?? "#ffffff",
-                stroke: "#0d0d14",
+                stroke: "#0d1119",
                 strokeWidth: 2,
               }}
             />

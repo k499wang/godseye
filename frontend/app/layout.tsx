@@ -1,16 +1,9 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const ibmPlexMono = IBM_Plex_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
 export const metadata: Metadata = {
-  title: "GodSEye — Prediction Market Simulator",
+  title: "GodSEye - Prediction Market Simulator",
   description: "Multi-agent prediction market analysis and simulation",
 };
 
@@ -20,10 +13,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${ibmPlexMono.variable} h-full`}>
+    <html lang="en" className="h-full">
       <body className="min-h-full flex flex-col antialiased">
-          <Providers>{children}</Providers>
-        </body>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

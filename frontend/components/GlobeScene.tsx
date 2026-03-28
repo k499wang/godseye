@@ -103,7 +103,7 @@ function MarkerContent({
         height: size,
         cursor: "pointer",
         transform: "translate(-50%, -50%)",
-        transition: "width 0.15s, height 0.15s",
+        transition: "width 0.2s cubic-bezier(0.4,0,0.2,1), height 0.2s cubic-bezier(0.4,0,0.2,1)",
       }}
     >
       {/* Outer pulse */}
@@ -167,6 +167,93 @@ function MarkerContent({
 }
 
 // ---------------------------------------------------------------------------
+// Country border lines — loaded from local GeoJSON so borders are always available
+// ---------------------------------------------------------------------------
+
+function CountryBorders() {
+  const [geo, setGeo] = useState<THREE.BufferGeometry | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/countries.geojson")
+      .then((response) => response.json())
+      .then((featureCollection) => {
+        if (cancelled) return;
+
+        const positions: number[] = [];
+        const pushRing = (ring: [number, number][]) => {
+          if (ring.length < 2) return;
+
+          for (let index = 0; index < ring.length - 1; index++) {
+            const [lng1, lat1] = ring[index];
+            const [lng2, lat2] = ring[index + 1];
+            const v1 = latLngToVec3(lat1, lng1, 1.003);
+            const v2 = latLngToVec3(lat2, lng2, 1.003);
+            positions.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
+          }
+        };
+
+        for (const feature of featureCollection.features as Array<{
+          geometry?: {
+            type: "Polygon" | "MultiPolygon";
+            coordinates: [number, number][][] | [number, number][][][];
+          };
+        }>) {
+          if (!feature.geometry) continue;
+
+          if (feature.geometry.type === "Polygon") {
+            for (const ring of feature.geometry.coordinates as [number, number][][]) {
+              pushRing(ring);
+            }
+          } else if (feature.geometry.type === "MultiPolygon") {
+            for (const polygon of feature.geometry.coordinates as [number, number][][][]) {
+              for (const ring of polygon) {
+                pushRing(ring);
+              }
+            }
+          }
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute(
+          "position",
+          new THREE.Float32BufferAttribute(positions, 3)
+        );
+        geometry.computeBoundingSphere();
+        if (!cancelled) setGeo(geometry);
+      })
+      .catch(console.error);
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!geo) return null;
+
+  return (
+    <group renderOrder={3}>
+      <lineSegments geometry={geo} scale={1.0015}>
+        <lineBasicMaterial
+          color="#7cb4e8"
+          opacity={0.08}
+          transparent
+          depthWrite={false}
+        />
+      </lineSegments>
+      <lineSegments geometry={geo}>
+        <lineBasicMaterial
+          color="#bfd4ea"
+          opacity={0.42}
+          transparent
+          depthWrite={false}
+        />
+      </lineSegments>
+    </group>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Earth + markers together in one group so markers track rotation for free
 // ---------------------------------------------------------------------------
 
@@ -175,34 +262,52 @@ interface EarthSystemProps {
   visibleIds: Set<string>;
   activeEvent: GlobeEvent | null;
   onEventSelect: (e: GlobeEvent) => void;
-  isAutoSpinning: boolean;
-  /** Exposes the rotating group so CameraController can read its world matrix */
+  showCountryBorders: boolean;
+  /** Exposes the rotating group so GlobeSpinner and CameraController can use it */
   groupRef: React.RefObject<THREE.Group | null>;
 }
 
-function EarthSystem({ events, visibleIds, activeEvent, onEventSelect, isAutoSpinning, groupRef }: EarthSystemProps) {
+function EarthSystem({
+  events,
+  visibleIds,
+  activeEvent,
+  onEventSelect,
+  showCountryBorders,
+  groupRef,
+}: EarthSystemProps) {
   const meshRef = useRef<THREE.Object3D>(null);
+  const { gl } = useThree();
+
+  // 4K clean natural-earth texture — no clouds, soft land/ocean palette
   const texture = useTexture(
-    "https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
+    "https://raw.githubusercontent.com/turban/webgl-earth/master/images/2_no_clouds_4k.jpg"
   );
 
-  // Idle spin — rotate the GROUP so markers stay in sync automatically
-  useFrame((_, delta) => {
-    if (isAutoSpinning && groupRef.current) groupRef.current.rotation.y += delta * 0.04;
-  });
+  // Apply texture quality settings synchronously at render time.
+  // Doing this in useEffect fires *after* the first draw, which shows graininess
+  // for one frame. Setting directly here ensures it's applied before any render.
+  const max = gl.capabilities.getMaxAnisotropy();
+  texture.anisotropy = max;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
 
   return (
     // NO initial rotation — texture and coordinates aligned from the start
     <group ref={groupRef}>
       {/* Earth sphere */}
       <mesh ref={meshRef}>
-        <sphereGeometry args={[1, 96, 96]} />
+        <sphereGeometry args={[1, 128, 128]} />
         <meshPhongMaterial
           map={texture}
-          specular={new THREE.Color(0x444444)}
-          shininess={12}
+          emissive={new THREE.Color(0x0d1520)}
+          emissiveIntensity={0.22}
+          specular={new THREE.Color(0x1a2a3a)}
+          shininess={6}
         />
       </mesh>
+
+      {/* Country borders — sits just above the surface */}
+      {showCountryBorders ? <CountryBorders /> : null}
 
       {/* Markers as children — inherit group rotation automatically */}
       {events.map((evt) => {
@@ -211,7 +316,6 @@ function EarthSystem({ events, visibleIds, activeEvent, onEventSelect, isAutoSpi
           <Html
             key={evt.id}
             position={[pos.x, pos.y, pos.z]}
-            // occlude against the Earth mesh so back-side markers disappear
             occlude={[meshRef] as any}
             zIndexRange={[60, 0]}
             style={{ pointerEvents: "auto" }}
@@ -227,6 +331,57 @@ function EarthSystem({ events, visibleIds, activeEvent, onEventSelect, isAutoSpi
       })}
     </group>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Globe spinner — lives OUTSIDE <Suspense> so it always runs,
+// even while EarthSystem is loading/suspended.
+// ---------------------------------------------------------------------------
+
+function GlobeSpinner({
+  groupRef,
+  isAutoSpinning,
+}: {
+  groupRef: React.RefObject<THREE.Group | null>;
+  isAutoSpinning: boolean;
+}) {
+  // Ref pattern: useFrame captures a stale closure at mount.
+  // Storing the prop in a ref ensures the frame loop always reads the latest value.
+  const spinRef = useRef(isAutoSpinning);
+  useEffect(() => {
+    spinRef.current = isAutoSpinning;
+  }, [isAutoSpinning]);
+
+  useFrame(({ camera }, delta) => {
+    // Never spin if camera is zoomed in past the threshold
+    const dist = camera.position.length();
+    if (spinRef.current && dist >= 2.6 && groupRef.current) {
+      groupRef.current.rotation.y += delta * 0.16;
+    }
+  });
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Zoom tracker — fires onZoomChange when camera crosses the zoom threshold.
+// Also lives OUTSIDE <Suspense> so it tracks zoom from the very first frame.
+// ---------------------------------------------------------------------------
+
+const ZOOM_THRESHOLD = 2.6;
+
+function ZoomTracker({ onZoomChange }: { onZoomChange: (zoomed: boolean) => void }) {
+  const wasZoomedRef = useRef(false);
+
+  useFrame(({ camera }) => {
+    const isZoomed = camera.position.length() < ZOOM_THRESHOLD;
+    if (isZoomed !== wasZoomedRef.current) {
+      wasZoomedRef.current = isZoomed;
+      onZoomChange(isZoomed);
+    }
+  });
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -295,7 +450,7 @@ function CameraController({
 
   useFrame((_, delta) => {
     if (!flyRef.current || flyRef.current.done) return;
-    flyRef.current.t = Math.min(1, flyRef.current.t + delta * 0.65);
+    flyRef.current.t = Math.min(1, flyRef.current.t + delta * 0.5);
     const ease = easeInOutCubic(flyRef.current.t);
     camera.position.lerpVectors(flyRef.current.start, flyRef.current.end, ease);
     camera.lookAt(0, 0, 0);
@@ -318,16 +473,20 @@ function Scene({
   visibleIds,
   activeEvent,
   onEventSelect,
+  showCountryBorders,
   onFlyComplete,
   onInteraction,
+  onZoomChange,
   isAutoSpinning,
 }: {
   events: GlobeEvent[];
   visibleIds: Set<string>;
   activeEvent: GlobeEvent | null;
   onEventSelect: (e: GlobeEvent) => void;
+  showCountryBorders: boolean;
   onFlyComplete: () => void;
   onInteraction: () => void;
+  onZoomChange: (zoomed: boolean) => void;
   isAutoSpinning: boolean;
 }) {
   const earthGroupRef = useRef<THREE.Group>(null);
@@ -340,7 +499,11 @@ function Scene({
       <directionalLight position={[-8, -2, -4]} intensity={0.6} color="#4080ff" />
       <directionalLight position={[0, 5, -5]} intensity={1.0} color="#ffffff" />
 
-      <Stars radius={90} depth={60} count={6000} factor={3.5} saturation={0} fade speed={0.4} />
+      <Stars radius={120} depth={60} count={10000} factor={3} saturation={0.15} fade speed={0.1} />
+
+      {/* GlobeSpinner and ZoomTracker are OUTSIDE Suspense so they always run */}
+      <GlobeSpinner groupRef={earthGroupRef} isAutoSpinning={isAutoSpinning} />
+      <ZoomTracker onZoomChange={onZoomChange} />
 
       <Suspense fallback={null}>
         <EarthSystem
@@ -348,7 +511,7 @@ function Scene({
           visibleIds={visibleIds}
           activeEvent={activeEvent}
           onEventSelect={onEventSelect}
-          isAutoSpinning={isAutoSpinning}
+          showCountryBorders={showCountryBorders}
           groupRef={earthGroupRef}
         />
         <Atmosphere />
@@ -363,12 +526,15 @@ function Scene({
 
       <OrbitControls
         ref={orbitRef}
-        enableZoom={false}
+        enableZoom
         enablePan={false}
+        zoomSpeed={0.6}
+        minDistance={2.0}
+        maxDistance={4.5}
         enableDamping
-        dampingFactor={0.06}
-        minPolarAngle={Math.PI * 0.2}
-        maxPolarAngle={Math.PI * 0.8}
+        dampingFactor={0.04}
+        minPolarAngle={Math.PI * 0.15}
+        maxPolarAngle={Math.PI * 0.85}
         onStart={onInteraction}
       />
     </>
@@ -384,16 +550,20 @@ export default function GlobeScene({
   visibleIds,
   activeEvent,
   onEventSelect,
+  showCountryBorders,
   onFlyComplete,
   onInteraction,
+  onZoomChange,
   isAutoSpinning,
 }: {
   events: GlobeEvent[];
   visibleIds: Set<string>;
   activeEvent: GlobeEvent | null;
   onEventSelect: (e: GlobeEvent) => void;
+  showCountryBorders: boolean;
   onFlyComplete: () => void;
   onInteraction: () => void;
+  onZoomChange: (zoomed: boolean) => void;
   isAutoSpinning: boolean;
 }) {
   return (
@@ -407,8 +577,10 @@ export default function GlobeScene({
         visibleIds={visibleIds}
         activeEvent={activeEvent}
         onEventSelect={onEventSelect}
+        showCountryBorders={showCountryBorders}
         onFlyComplete={onFlyComplete}
         onInteraction={onInteraction}
+        onZoomChange={onZoomChange}
         isAutoSpinning={isAutoSpinning}
       />
     </Canvas>

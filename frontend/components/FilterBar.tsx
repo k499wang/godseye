@@ -1,5 +1,6 @@
 "use client";
 
+import { forwardRef, type CSSProperties } from "react";
 import { useGlobe } from "./GlobeContext";
 import { CATEGORY_COLOR, type GlobeEventCategory } from "@/lib/globeData";
 
@@ -12,19 +13,35 @@ const CATEGORIES: { key: GlobeEventCategory; label: string }[] = [
   { key: "macro", label: "MACRO" },
 ];
 
-export function FilterBar() {
+export const FilterBar = forwardRef<
+  HTMLDivElement,
+  {
+    dimmed?: boolean;
+    style?: CSSProperties;
+    onHoverChange?: (hovered: boolean) => void;
+  }
+>(function FilterBar({ dimmed = false, style, onHoverChange }, ref) {
   const { activeFilters, toggleFilter, setAllFilters } = useGlobe();
   const allActive = activeFilters.size === CATEGORIES.length;
   const noneActive = activeFilters.size === 0;
 
   return (
     <div
-      className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-2 flex-wrap justify-center"
+      ref={ref}
+      className="absolute left-5 z-20 flex items-center gap-2 px-3 py-2 flex-wrap justify-start"
+      onMouseEnter={() => onHoverChange?.(true)}
+      onMouseLeave={() => onHoverChange?.(false)}
       style={{
+        top: 74,
         background: "rgba(5,5,9,0.88)",
         border: "1px solid var(--border-strong)",
         backdropFilter: "blur(8px)",
-        maxWidth: "calc(100vw - 420px - 24px)",
+        maxWidth: "min(820px, calc(100vw - 480px))",
+        borderRadius: 18,
+        opacity: dimmed ? 0.16 : 1,
+        transition: "opacity 0.18s ease",
+        pointerEvents: "auto",
+        ...style,
       }}
     >
       <button
@@ -79,7 +96,7 @@ export function FilterBar() {
       })}
     </div>
   );
-}
+});
 
 const chipBase: React.CSSProperties = {
   fontFamily: "var(--font-mono)",

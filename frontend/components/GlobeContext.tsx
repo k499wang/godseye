@@ -12,10 +12,6 @@ import {
 } from "react";
 import { GLOBE_EVENTS, type GlobeEvent, type GlobeEventCategory } from "@/lib/globeData";
 
-// ---------------------------------------------------------------------------
-// All categories present in mock data
-// ---------------------------------------------------------------------------
-
 const ALL_CATEGORIES: GlobeEventCategory[] = [
   "monetary",
   "geopolitical",
@@ -25,47 +21,34 @@ const ALL_CATEGORIES: GlobeEventCategory[] = [
   "macro",
 ];
 
-// ---------------------------------------------------------------------------
-// Context shape
-// ---------------------------------------------------------------------------
-
 interface GlobeContextValue {
   events: GlobeEvent[];
-
-  // Filters
   activeFilters: Set<GlobeEventCategory>;
   toggleFilter: (cat: GlobeEventCategory) => void;
   setAllFilters: (active: boolean) => void;
-
-  // Timeline
   timelineMin: Date | null;
   timelineMax: Date | null;
   timelinePosition: Date | null;
-  setTimelinePosition: (d: Date) => void;
-
-  // Derived visibility
+  setTimelinePosition: (
+    date: Date,
+    options?: { preserveAutoSpin?: boolean }
+  ) => void;
   visibleIds: Set<string>;
-
-  // Selection
   selectedEventId: string | null;
   setSelectedEventId: (id: string | null) => void;
-
-  // Camera focus
   globeFocusTarget: { lat: number; lng: number } | null;
-  setGlobeFocusTarget: (t: { lat: number; lng: number } | null) => void;
-
-  // Auto-spin
+  setGlobeFocusTarget: (target: { lat: number; lng: number } | null) => void;
   isAutoSpinning: boolean;
+  autoSpinEnabled: boolean;
+  isZoomedIn: boolean;
+  setIsZoomedIn: (value: boolean) => void;
   stopAutoSpin: () => void;
+  setAutoSpinEnabled: (enabled: boolean) => void;
 }
 
 const GlobeContext = createContext<GlobeContextValue | null>(null);
 
-const AUTO_SPIN_RESUME_MS = 5 * 60 * 1000; // 5 minutes
-
-// ---------------------------------------------------------------------------
-// Provider
-// ---------------------------------------------------------------------------
+const AUTO_SPIN_RESUME_MS = 6000;
 
 export function GlobeProvider({ children }: { children: ReactNode }) {
   const [events] = useState<GlobeEvent[]>(GLOBE_EVENTS);
@@ -78,62 +61,118 @@ export function GlobeProvider({ children }: { children: ReactNode }) {
     lat: number;
     lng: number;
   } | null>(null);
+  const [autoSpinEnabled, setAutoSpinEnabledState] = useState(true);
   const [isAutoSpinning, setIsAutoSpinning] = useState(true);
+  const [isZoomedIn, setIsZoomedInState] = useState(false);
+
+  const isZoomedInRef = useRef(false);
+  const autoSpinEnabledRef = useRef(true);
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Derive timeline bounds from event start_times
   const timelineMin = useMemo(() => {
     const times = events
-      .map((e) => (e.start_time ? new Date(e.start_time).getTime() : 0))
+      .map((event) => (event.start_time ? new Date(event.start_time).getTime() : 0))
       .filter(Boolean);
     return times.length ? new Date(Math.min(...times)) : null;
   }, [events]);
 
   const timelineMax = useMemo(() => {
     const times = events
-      .map((e) => (e.start_time ? new Date(e.start_time).getTime() : 0))
+      .map((event) => (event.start_time ? new Date(event.start_time).getTime() : 0))
       .filter(Boolean);
     return times.length ? new Date(Math.max(...times)) : null;
   }, [events]);
 
-  // Initialise timeline position to max (show all events)
   useEffect(() => {
     if (timelineMax && !timelinePosition) {
       setTimelinePositionRaw(timelineMax);
     }
   }, [timelineMax, timelinePosition]);
 
-  // Derived: which events pass the current filter + timeline
   const visibleIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const evt of events) {
-      if (!activeFilters.has(evt.category)) continue;
+    for (const event of events) {
+      if (!activeFilters.has(event.category)) continue;
       if (
         timelinePosition &&
-        evt.start_time &&
-        new Date(evt.start_time) > timelinePosition
-      )
+        event.start_time &&
+        new Date(event.start_time) > timelinePosition
+      ) {
         continue;
-      ids.add(evt.id);
+      }
+      ids.add(event.id);
     }
     return ids;
   }, [events, activeFilters, timelinePosition]);
 
-  const stopAutoSpin = useCallback(() => {
-    setIsAutoSpinning(false);
-    if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-    inactivityTimer.current = setTimeout(
-      () => setIsAutoSpinning(true),
-      AUTO_SPIN_RESUME_MS
-    );
+  const clearResumeTimer = useCallback(() => {
+    if (inactivityTimer.current) {
+      clearTimeout(inactivityTimer.current);
+      inactivityTimer.current = null;
+    }
   }, []);
 
+  const scheduleResume = useCallback(() => {
+    if (!autoSpinEnabledRef.current) return;
+    clearResumeTimer();
+    inactivityTimer.current = setTimeout(() => {
+      if (autoSpinEnabledRef.current && !isZoomedInRef.current) {
+        setIsAutoSpinning(true);
+      }
+    }, AUTO_SPIN_RESUME_MS);
+  }, [clearResumeTimer]);
+
+  const stopAutoSpin = useCallback(() => {
+    setIsAutoSpinning(false);
+
+    if (!autoSpinEnabledRef.current) {
+      clearResumeTimer();
+      return;
+    }
+
+    if (!isZoomedInRef.current) {
+      scheduleResume();
+    } else {
+      clearResumeTimer();
+    }
+  }, [clearResumeTimer, scheduleResume]);
+
+  const setAutoSpinEnabled = useCallback(
+    (enabled: boolean) => {
+      autoSpinEnabledRef.current = enabled;
+      setAutoSpinEnabledState(enabled);
+      clearResumeTimer();
+
+      if (enabled && !isZoomedInRef.current) {
+        setIsAutoSpinning(true);
+      } else {
+        setIsAutoSpinning(false);
+      }
+    },
+    [clearResumeTimer]
+  );
+
+  const setIsZoomedIn = useCallback(
+    (zoomed: boolean) => {
+      isZoomedInRef.current = zoomed;
+      setIsZoomedInState(zoomed);
+
+      if (zoomed) {
+        setIsAutoSpinning(false);
+        clearResumeTimer();
+      } else if (autoSpinEnabledRef.current) {
+        scheduleResume();
+      }
+    },
+    [clearResumeTimer, scheduleResume]
+  );
+
   const toggleFilter = useCallback(
-    (cat: GlobeEventCategory) => {
+    (category: GlobeEventCategory) => {
       stopAutoSpin();
-      setActiveFilters((prev) => {
-        const next = new Set(prev);
-        next.has(cat) ? next.delete(cat) : next.add(cat);
+      setActiveFilters((previous) => {
+        const next = new Set(previous);
+        next.has(category) ? next.delete(category) : next.add(category);
         return next;
       });
     },
@@ -149,9 +188,11 @@ export function GlobeProvider({ children }: { children: ReactNode }) {
   );
 
   const setTimelinePosition = useCallback(
-    (d: Date) => {
-      stopAutoSpin();
-      setTimelinePositionRaw(d);
+    (date: Date, options?: { preserveAutoSpin?: boolean }) => {
+      if (!options?.preserveAutoSpin) {
+        stopAutoSpin();
+      }
+      setTimelinePositionRaw(date);
     },
     [stopAutoSpin]
   );
@@ -173,7 +214,11 @@ export function GlobeProvider({ children }: { children: ReactNode }) {
         globeFocusTarget,
         setGlobeFocusTarget,
         isAutoSpinning,
+        autoSpinEnabled,
+        isZoomedIn,
+        setIsZoomedIn,
         stopAutoSpin,
+        setAutoSpinEnabled,
       }}
     >
       {children}
@@ -182,7 +227,7 @@ export function GlobeProvider({ children }: { children: ReactNode }) {
 }
 
 export function useGlobe(): GlobeContextValue {
-  const ctx = useContext(GlobeContext);
-  if (!ctx) throw new Error("useGlobe must be used inside GlobeProvider");
-  return ctx;
+  const context = useContext(GlobeContext);
+  if (!context) throw new Error("useGlobe must be used inside GlobeProvider");
+  return context;
 }
