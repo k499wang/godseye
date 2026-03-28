@@ -1,0 +1,197 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --background: #070911;
+  --foreground: #f4f7fb;
+  --accent: #f59e0b;
+  --accent-dim: rgba(245, 158, 11, 0.14);
+  --border: rgba(255, 255, 255, 0.08);
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", "Consolas", "SFMono-Regular", monospace;
+  --font-sans: "Aptos", "Segoe UI Variable Display", "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-display: "Aptos Display", "Segoe UI Variable Display", "Aptos", "Inter", "Segoe UI", sans-serif;
+
+  /* Overlay system variables */
+  --bg-base: #05070d;
+  --bg-surface: #0d1119;
+  --bg-raised: #151b26;
+  --bg-glass: rgba(12, 16, 26, 0.76);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text-bright: #fbfdff;
+  --text-primary: #edf2f8;
+  --text-secondary: #c6d0de;
+  --text-muted: #8b97ab;
+  --text-subtle: #5f6b7d;
+  --success: #34d399;
+  --danger: #fb7185;
+  --card-shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--background);
+  color: var(--foreground);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: auto;
+  scrollbar-color: rgba(245, 158, 11, 0.5) rgba(255, 255, 255, 0.06);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.55;
+  letter-spacing: -0.01em;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: center center;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.78) 0%, rgba(245, 158, 11, 0.42) 100%);
+  border-radius: 999px;
+  border: 2px solid rgba(7, 9, 17, 0.72);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(251, 191, 36, 0.9) 0%, rgba(245, 158, 11, 0.56) 100%);
+}
+
+/* Scanline overlay (subtle) */
+body::after {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.015) 2px,
+    rgba(0, 0, 0, 0.015) 4px
+  );
+}
+
+.ui-mono {
+  font-family: var(--font-mono);
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.surface-card {
+  background: linear-gradient(180deg, rgba(18, 23, 34, 0.96) 0%, rgba(11, 15, 24, 0.98) 100%);
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  box-shadow: var(--card-shadow);
+}
+
+.metric-display {
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 4vw, 3.7rem);
+  line-height: 0.95;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--text-bright);
+}
+
+.report-copy {
+  font-size: 1.02rem;
+  line-height: 1.8;
+  color: var(--text-secondary);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes globePulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s ease forwards;
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-36px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideOutLeft {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(-36px); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Smooth transition helper — used on overlay panels */
+.panel-transition {
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity   0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Selection */
+::selection {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fff;
+}
