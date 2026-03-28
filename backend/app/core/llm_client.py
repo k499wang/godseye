@@ -156,8 +156,7 @@ class LLMClient:
             raise RuntimeError("Missing LAVA_API_KEY for Apollo access")
 
         payload = {
-            "person_titles": job_titles,
-            "q_keywords": " ".join(keywords),
+            "person_titles": job_titles[:4],
             "per_page": limit,
             "page": 1,
         }
@@ -281,7 +280,7 @@ class LLMClient:
         if not cleaned:
             raise ValueError("LLM returned an empty response for a JSON-format request")
 
-        parsed = json.loads(cleaned)
+        parsed = json.loads(cleaned, strict=False)
         return json.dumps(parsed)
 
     def _extract_apollo_results(self, payload: Any) -> list[dict[str, Any]]:
