@@ -209,14 +209,14 @@ class WorldBuilder:
             )
             return [
                 ProfessionalBackground(
-                    title=p.get("title", "Analyst"),
-                    company=p.get("company", "Unknown"),
-                    industry=p.get("industry", "General"),
-                    apollo_enriched=True,
+                    title=p.title,
+                    company=p.company,
+                    industry=p.industry,
+                    apollo_enriched=p.apollo_enriched,
                 )
                 for p in profiles_raw
             ]
-        except (ImportError, AttributeError):
+        except ImportError:
             return []
 
     async def _get_synthetic_profiles(
