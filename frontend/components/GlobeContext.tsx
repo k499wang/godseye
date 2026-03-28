@@ -10,7 +10,8 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
-import { GLOBE_EVENTS, type GlobeEvent, type GlobeEventCategory } from "@/lib/globeData";
+import { GLOBE_EVENTS, browseItemToGlobeEvent, type GlobeEvent, type GlobeEventCategory } from "@/lib/globeData";
+import { browseMarkets, refreshMarkets } from "@/lib/api";
 
 const ALL_CATEGORIES: GlobeEventCategory[] = [
   "monetary",
@@ -23,6 +24,8 @@ const ALL_CATEGORIES: GlobeEventCategory[] = [
 
 interface GlobeContextValue {
   events: GlobeEvent[];
+  isLoadingEvents: boolean;
+  refreshEvents: () => Promise<void>;
   activeFilters: Set<GlobeEventCategory>;
   toggleFilter: (cat: GlobeEventCategory) => void;
   setAllFilters: (active: boolean) => void;
@@ -51,7 +54,30 @@ const GlobeContext = createContext<GlobeContextValue | null>(null);
 const AUTO_SPIN_RESUME_MS = 6000;
 
 export function GlobeProvider({ children }: { children: ReactNode }) {
-  const [events] = useState<GlobeEvent[]>(GLOBE_EVENTS);
+  const [events, setEvents] = useState<GlobeEvent[]>(GLOBE_EVENTS);
+  const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    browseMarkets()
+      .then((res) => {
+        if (!cancelled) setEvents(res.markets.map(browseItemToGlobeEvent));
+      })
+      .catch(() => {/* keep GLOBE_EVENTS fallback on failure */});
+    return () => { cancelled = true; };
+  }, []);
+
+  const refreshEvents = useCallback(async () => {
+    setIsLoadingEvents(true);
+    try {
+      const res = await refreshMarkets();
+      setEvents(res.markets.map(browseItemToGlobeEvent));
+    } catch {
+      // keep current events on failure
+    } finally {
+      setIsLoadingEvents(false);
+    }
+  }, []);
   const [activeFilters, setActiveFilters] = useState<Set<GlobeEventCategory>>(
     new Set(ALL_CATEGORIES)
   );
@@ -201,6 +227,8 @@ export function GlobeProvider({ children }: { children: ReactNode }) {
     <GlobeContext.Provider
       value={{
         events,
+        isLoadingEvents,
+        refreshEvents,
         activeFilters,
         toggleFilter,
         setAllFilters,

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { GLOBE_EVENTS, CATEGORY_COLOR, type GlobeEvent } from "@/lib/globeData";
+import { CATEGORY_COLOR, type GlobeEvent } from "@/lib/globeData";
+import { useGlobe } from "@/components/GlobeContext";
 
 const SUGGESTIONS = [
   "Fed",
@@ -18,11 +19,11 @@ const SUGGESTIONS = [
   "OPEC",
 ];
 
-function searchEvents(query: string): GlobeEvent[] {
+function searchEvents(query: string, events: GlobeEvent[]): GlobeEvent[] {
   const value = query.trim().toLowerCase();
   if (!value) return [];
 
-  return GLOBE_EVENTS.filter(
+  return events.filter(
     (event) =>
       event.title.toLowerCase().includes(value) ||
       event.region.toLowerCase().includes(value) ||
@@ -36,6 +37,7 @@ export function GlobeSearch({
 }: {
   onSelect: (event: GlobeEvent) => void;
 }) {
+  const { events } = useGlobe();
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
@@ -49,7 +51,7 @@ export function GlobeSearch({
     return () => clearInterval(interval);
   }, []);
 
-  const results = searchEvents(query);
+  const results = searchEvents(query, events);
   const showDropdown = focused && (results.length > 0 || query.length > 0);
 
   const handleSelect = useCallback(

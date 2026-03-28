@@ -1,3 +1,5 @@
+import type { MarketBrowseItem } from "./types";
+
 export type GlobeEventCategory =
   | "monetary"
   | "geopolitical"
@@ -31,6 +33,65 @@ export const CATEGORY_COLOR: Record<GlobeEventCategory, string> = {
   energy: "#10B981",
   macro: "#F97316",
 };
+
+function slugToLatLng(slug: string): { lat: number; lng: number } {
+  let h1 = 0, h2 = 0;
+  for (let i = 0; i < slug.length; i++) {
+    const c = slug.charCodeAt(i);
+    h1 = (h1 * 31 + c) & 0xffff;
+    h2 = (h2 * 37 + c * 3) & 0xffff;
+  }
+  // Keep away from poles (±60) so globe projection doesn't cluster dots
+  const lat = (h1 / 0xffff) * 120 - 60;
+  const lng = (h2 / 0xffff) * 360 - 180;
+  return { lat, lng };
+}
+
+function classifyCategory(title: string): GlobeEventCategory {
+  const t = title.toLowerCase();
+  if (/war|ceasefire|military|russia|ukraine|china|taiwan|iran|israel|nato|conflict|troops|invasion|sanction/.test(t))
+    return "geopolitical";
+  if (/election|vote|president|congress|senate|ballot|prime minister|chancellor|governor/.test(t))
+    return "election";
+  if (/fed|federal reserve|\brate\b|interest rate|inflation|\bcpi\b|\bpce\b|\becb\b|\bboe\b|central bank/.test(t))
+    return "monetary";
+  if (/bitcoin|crypto|ethereum|\bai\b|artificial intelligence|openai|apple|google|microsoft|technology|software/.test(t))
+    return "tech";
+  if (/\boil\b|opec|\bgas\b|energy|nuclear|solar|coal|barrel|petroleum/.test(t))
+    return "energy";
+  return "macro";
+}
+
+function deriveRegion(title: string): string {
+  const t = title.toLowerCase();
+  if (/russia|ukraine/.test(t)) return "Eastern Europe";
+  if (/china|taiwan|hong kong/.test(t)) return "Asia Pacific";
+  if (/iran|israel|middle east|gaza|saudi/.test(t)) return "Middle East";
+  if (/india/.test(t)) return "India";
+  if (/europe|eu |ecb|germany|france|uk |britain/.test(t)) return "Europe";
+  if (/bitcoin|crypto|ethereum/.test(t)) return "Global";
+  if (/nfl|nba|mlb|nhl|ncaa|college|illini|hawkeye|boilermaker|wildcat|huskie|spartan|jayhawk|wolverine|buckeye/.test(t)) return "United States";
+  if (/world cup|fifa|olympic|global/.test(t)) return "Global";
+  return "Global";
+}
+
+export function browseItemToGlobeEvent(item: MarketBrowseItem): GlobeEvent {
+  const { lat, lng } = slugToLatLng(item.slug);
+  return {
+    id: item.slug,
+    title: item.title.length > 50 ? item.title.slice(0, 47) + "…" : item.title,
+    region: deriveRegion(item.title),
+    question: item.title,
+    probability: item.probability,
+    lat,
+    lng,
+    category: classifyCategory(item.title),
+    simulationId: null,
+    volume: item.volume,
+    image_url: item.image ?? null,
+    confidence_score: 0.5,
+  };
+}
 
 export const GLOBE_EVENTS: GlobeEvent[] = [
   {
