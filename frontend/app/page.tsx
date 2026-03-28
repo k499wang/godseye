@@ -1,236 +1,234 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { MarketImport } from "@/components/MarketImport";
-import { generateClaims, buildWorld, startSimulation } from "@/lib/api";
-import type { MarketResponse } from "@/lib/types";
+import dynamic from "next/dynamic";
+import { useState, useCallback } from "react";
+import { EventFocusPanel } from "@/components/EventFocusPanel";
+import { GLOBE_EVENTS } from "@/lib/globeData";
+import type { GlobeEvent } from "@/lib/globeData";
 
-type Step = "import" | "generating" | "building" | "starting" | "done" | "error";
+// Three.js must not run in SSR
+const GlobeScene = dynamic(() => import("@/components/GlobeScene"), {
+  ssr: false,
+  loading: () => <GlobeLoader />,
+});
 
-const STEP_LABELS: Record<Step, string> = {
-  import: "READY",
-  generating: "GENERATING CLAIMS",
-  building: "BUILDING WORLD",
-  starting: "STARTING SIMULATION",
-  done: "LAUNCHED",
-  error: "ERROR",
-};
+// ---------------------------------------------------------------------------
+// Loading state while canvas initialises
+// ---------------------------------------------------------------------------
 
-export default function HomePage() {
-  const router = useRouter();
-  const [step, setStep] = useState<Step>("import");
-  const [market, setMarket] = useState<MarketResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleImported(m: MarketResponse) {
-    setMarket(m);
-    setError(null);
-
-    try {
-      setStep("generating");
-      await generateClaims(m.id);
-
-      setStep("building");
-      const sim = await buildWorld(m.session_id);
-
-      setStep("starting");
-      const started = await startSimulation(sim.id);
-
-      setStep("done");
-      router.push(`/simulation/${started.id}`);
-    } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data
-          ?.detail ?? "Pipeline failed. Check the backend.";
-      setError(msg);
-      setStep("error");
-    }
-  }
-
-  function handleUseMock() {
-    router.push(`/simulation/mock`);
-  }
-
+function GlobeLoader() {
   return (
-    <main className="flex flex-col min-h-screen">
-      {/* Header */}
-      <header className="border-b border-[rgba(255,255,255,0.06)] px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-[#F59E0B]" />
-            <span className="font-mono text-[11px] tracking-[0.3em] text-[#F59E0B] font-bold">
-              GODSEYE
-            </span>
-          </div>
-          <span className="text-[#2d2d3a] font-mono text-[10px]">
-            PREDICTION MARKET SIMULATOR
-          </span>
-        </div>
-        <div className="font-mono text-[9px] tracking-widest text-[#374151]">
-          MULTI-AGENT ANALYSIS SYSTEM v1.0
-        </div>
-      </header>
-
-      {/* Hero */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 animate-fade-in-up">
-        <div className="mb-8 text-center">
-          <div className="font-mono text-[9px] tracking-[0.4em] text-[#4b5563] mb-3">
-            POWERED BY GEMINI · K2-THINK · APOLLO.IO
-          </div>
-          <h1 className="text-[clamp(28px,4vw,48px)] font-bold tracking-tight text-white mb-4 font-mono">
-            Simulate the Market
-          </h1>
-          <p className="font-mono text-[12px] text-[#6b7280] max-w-lg mx-auto leading-relaxed">
-            Import a Polymarket prediction market. 12 AI agents — each with real
-            professional personas sourced from Apollo.io — debate the evidence
-            over 30 simulation ticks. Watch beliefs converge. Read the final
-            report.
-          </p>
-        </div>
-
-        {/* Import form / pipeline status */}
-        <div className="w-full max-w-2xl">
-          {step === "import" || step === "error" ? (
-            <MarketImport onImported={handleImported} />
-          ) : (
-            <div className="border border-[rgba(245,158,11,0.2)] p-6">
-              <PipelineStatus step={step} market={market} />
-            </div>
-          )}
-
-          {error && step === "error" && (
-            <div className="mt-3 border border-[rgba(239,68,68,0.3)] bg-[rgba(239,68,68,0.05)] px-3 py-2 font-mono text-[11px] text-[#EF4444]">
-              {error}
-            </div>
-          )}
-
-          {(step === "import" || step === "error") && (
-            <>
-              <div className="mt-6 flex items-center gap-3">
-                <div className="flex-1 h-px bg-[rgba(255,255,255,0.06)]" />
-                <span className="font-mono text-[9px] tracking-widest text-[#374151]">OR</span>
-                <div className="flex-1 h-px bg-[rgba(255,255,255,0.06)]" />
-              </div>
-              <button
-                onClick={handleUseMock}
-                className="mt-4 w-full py-2.5 font-mono text-[10px] tracking-widest text-[#6b7280] border border-[rgba(255,255,255,0.08)] hover:border-[rgba(245,158,11,0.25)] hover:text-[#9ca3af] transition-colors"
-              >
-                VIEW DEMO WITH MOCK DATA →
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* Feature grid */}
-        <div className="mt-16 grid grid-cols-3 gap-px max-w-2xl w-full border border-[rgba(255,255,255,0.06)]">
-          {[
-            {
-              label: "12 AGENTS",
-              desc: "6 archetypes × 2 agents, each with real Apollo.io professional backgrounds",
-            },
-            {
-              label: "30 TICKS",
-              desc: "Each tick: every agent reads evidence, updates belief, or shares a claim",
-            },
-            {
-              label: "FULL REPORT",
-              desc: "Probability comparison, faction analysis, trust insights, recommendation",
-            },
-          ].map((f) => (
-            <div key={f.label} className="p-4 bg-[rgba(255,255,255,0.015)]">
-              <div className="font-mono text-[10px] tracking-widest text-[#F59E0B] mb-2">
-                {f.label}
-              </div>
-              <div className="font-mono text-[10px] text-[#6b7280] leading-relaxed">
-                {f.desc}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </main>
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+      <div
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: "50%",
+          border: "1.5px solid rgba(245,158,11,0.15)",
+          borderTop: "1.5px solid #F59E0B",
+          animation: "spin 1s linear infinite",
+        }}
+      />
+      <span
+        style={{
+          fontFamily: "var(--font-mono, monospace)",
+          fontSize: 10,
+          letterSpacing: "0.3em",
+          color: "#4b5563",
+        }}
+      >
+        INITIALISING GLOBE
+      </span>
+    </div>
   );
 }
 
-function PipelineStatus({
-  step,
-  market,
-}: {
-  step: Step;
-  market: MarketResponse | null;
-}) {
-  const steps: Step[] = ["generating", "building", "starting", "done"];
-  const currentIdx = steps.indexOf(step);
+// ---------------------------------------------------------------------------
+// Legend pill
+// ---------------------------------------------------------------------------
+
+const CATEGORIES = [
+  { key: "monetary", label: "MONETARY", color: "#F59E0B" },
+  { key: "geopolitical", label: "GEOPOLITICAL", color: "#EF4444" },
+  { key: "tech", label: "TECHNOLOGY", color: "#06B6D4" },
+  { key: "energy", label: "ENERGY", color: "#10B981" },
+  { key: "macro", label: "MACRO", color: "#F97316" },
+] as const;
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+export default function GlobePage() {
+  const [activeEvent, setActiveEvent] = useState<GlobeEvent | null>(null);
+  const handleEventSelect = useCallback((event: GlobeEvent) => {
+    setActiveEvent(event);
+  }, []);
+
+  const handleClose = useCallback(() => {
+    setActiveEvent(null);
+  }, []);
+
+  const handleFlyComplete = useCallback(() => {
+    // fly complete — reserved for future use (e.g. triggering panel entrance)
+  }, []);
 
   return (
-    <div>
-      {market && (
-        <div className="mb-4 pb-4 border-b border-[rgba(255,255,255,0.06)]">
-          <div className="font-mono text-[9px] tracking-widest text-[#4b5563] mb-1">
-            MARKET IMPORTED
+    <main
+      className="relative w-full h-screen overflow-hidden"
+      style={{ background: "#050509" }}
+    >
+      {/* ── Deep-space vignette ── */}
+      <div
+        className="absolute inset-0 pointer-events-none z-10"
+        style={{
+          background:
+            "radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(5,5,9,0.75) 100%)",
+        }}
+      />
+
+      {/* ── Globe canvas ── */}
+      <div className="absolute inset-0 z-0">
+        <GlobeScene
+          events={GLOBE_EVENTS}
+          activeEvent={activeEvent}
+          onEventSelect={handleEventSelect}
+          onFlyComplete={handleFlyComplete}
+        />
+      </div>
+
+      {/* ── Header ── */}
+      <header
+        className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-6 py-4"
+        style={{
+          background:
+            "linear-gradient(180deg, rgba(5,5,9,0.8) 0%, transparent 100%)",
+        }}
+      >
+        {/* Wordmark */}
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                background: "#F59E0B",
+                boxShadow: "0 0 12px #F59E0B",
+              }}
+            />
           </div>
-          <div className="font-mono text-[12px] text-[#e5e7eb] leading-relaxed">
-            {market.question}
-          </div>
-          <div className="flex gap-4 mt-1">
-            <span className="font-mono text-[10px] text-[#6b7280]">
-              POLYMARKET:{" "}
-              <span className="text-[#F59E0B]">
-                {Math.round(market.current_probability * 100)}%
-              </span>
+          <div>
+            <span
+              style={{
+                fontFamily: "var(--font-mono, monospace)",
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: "0.3em",
+                color: "#F59E0B",
+              }}
+            >
+              GODSEYE
             </span>
-            <span className="font-mono text-[10px] text-[#6b7280]">
-              VOL: ${(market.volume / 1e6).toFixed(1)}M
+            <span
+              style={{
+                fontFamily: "var(--font-mono, monospace)",
+                fontSize: 9,
+                letterSpacing: "0.25em",
+                color: "#374151",
+                display: "block",
+                marginTop: 1,
+              }}
+            >
+              PREDICTION MARKET INTELLIGENCE
             </span>
           </div>
         </div>
-      )}
 
-      <div className="flex flex-col gap-2">
-        {steps.map((s, i) => {
-          const done = i < currentIdx || step === "done";
-          const active = i === currentIdx && step !== "done";
-          return (
-            <div key={s} className="flex items-center gap-3">
+        {/* Status bar */}
+        <div
+          style={{
+            fontFamily: "var(--font-mono, monospace)",
+            fontSize: 9,
+            letterSpacing: "0.2em",
+            color: "#4b5563",
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+          }}
+        >
+          <span>
+            <span style={{ color: "#10B981" }}>●</span> LIVE
+          </span>
+          <span>{GLOBE_EVENTS.length} ACTIVE MARKETS</span>
+          <span style={{ color: "#374151" }}>
+            {new Date().toUTCString().slice(0, 16).toUpperCase()}
+          </span>
+        </div>
+      </header>
+
+      {/* ── Bottom legend + hint ── */}
+      <div
+        className="absolute bottom-0 left-0 right-0 z-20 flex items-end justify-between px-6 py-5"
+        style={{
+          background:
+            "linear-gradient(0deg, rgba(5,5,9,0.85) 0%, transparent 100%)",
+          pointerEvents: activeEvent ? "none" : "auto",
+          opacity: activeEvent ? 0 : 1,
+          transition: "opacity 0.35s ease",
+        }}
+      >
+        {/* Category legend */}
+        <div className="flex items-center gap-4 flex-wrap">
+          {CATEGORIES.map((cat) => (
+            <div
+              key={cat.key}
+              className="flex items-center gap-1.5"
+              style={{
+                fontFamily: "var(--font-mono, monospace)",
+                fontSize: 9,
+                letterSpacing: "0.2em",
+                color: "#6b7280",
+              }}
+            >
               <div
-                className="w-5 h-5 flex items-center justify-center flex-shrink-0 border"
                 style={{
-                  borderColor: done
-                    ? "#10B981"
-                    : active
-                    ? "#F59E0B"
-                    : "rgba(255,255,255,0.1)",
-                  background: done
-                    ? "rgba(16,185,129,0.1)"
-                    : active
-                    ? "rgba(245,158,11,0.1)"
-                    : "transparent",
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: cat.color,
+                  boxShadow: `0 0 4px ${cat.color}`,
                 }}
-              >
-                {done ? (
-                  <span className="text-[10px] text-[#10B981]">✓</span>
-                ) : active ? (
-                  <span
-                    className="inline-block w-2 h-2 border border-[#F59E0B] border-t-transparent rounded-full"
-                    style={{ animation: "spin 0.8s linear infinite" }}
-                  />
-                ) : (
-                  <span className="w-1 h-1 bg-[rgba(255,255,255,0.15)] rounded-full" />
-                )}
-              </div>
-              <span
-                className="font-mono text-[10px] tracking-widest"
-                style={{
-                  color: done ? "#10B981" : active ? "#F59E0B" : "#374151",
-                }}
-              >
-                {STEP_LABELS[s]}
-              </span>
+              />
+              {cat.label}
             </div>
-          );
-        })}
+          ))}
+        </div>
+
+        {/* Interaction hint */}
+        <div
+          style={{
+            fontFamily: "var(--font-mono, monospace)",
+            fontSize: 9,
+            letterSpacing: "0.2em",
+            color: "#374151",
+            textAlign: "right",
+          }}
+        >
+          DRAG TO ROTATE · CLICK MARKER TO ANALYSE
+        </div>
       </div>
-    </div>
+
+      {/* ── Event focus panel ── */}
+      <EventFocusPanel event={activeEvent} onClose={handleClose} />
+
+      {/* ── Scanline overlay (subtle texture) ── */}
+      <div
+        className="absolute inset-0 pointer-events-none z-50"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.012) 3px, rgba(0,0,0,0.012) 4px)",
+        }}
+      />
+    </main>
   );
 }
