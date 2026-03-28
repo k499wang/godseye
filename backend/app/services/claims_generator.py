@@ -49,22 +49,31 @@ class ClaimsGeneratorService:
         *,
         db: AsyncSession,
         market_id: UUID,
+        session_id: UUID | None = None,
     ) -> ClaimsGenerateResponse:
-        market, analysis_session = await self._load_market_and_session(
-            db=db,
-            market_id=market_id,
-        )
-
-        existing_claims = await self._load_existing_claims(
-            db=db,
-            market_id=market_id,
-            session_id=analysis_session.id,
-        )
-        if existing_claims:
-            return self._to_response(
+        if session_id is None:
+            market, analysis_session = await self._load_market_and_session(
+                db=db,
                 market_id=market_id,
-                session_id=analysis_session.id,
-                claims=existing_claims,
+            )
+            session_id = analysis_session.id
+
+            existing_claims = await self._load_existing_claims(
+                db=db,
+                market_id=market_id,
+                session_id=session_id,
+            )
+            if existing_claims:
+                return self._to_response(
+                    market_id=market_id,
+                    session_id=session_id,
+                    claims=existing_claims,
+                )
+        else:
+            market = await self._load_market(
+                db=db,
+                market_id=market_id,
+                session_id=session_id,
             )
 
         prompt = self._build_claims_prompt(market=market)
@@ -80,7 +89,7 @@ class ClaimsGeneratorService:
         claims_payload = self._parse_claims_response(raw_response)
         claim_models = [
             Claim(
-                session_id=analysis_session.id,
+                session_id=session_id,
                 market_id=market_id,
                 text=claim.text.strip(),
                 stance=claim.stance,  # type: ignore[arg-type]
@@ -98,7 +107,7 @@ class ClaimsGeneratorService:
 
         return self._to_response(
             market_id=market_id,
-            session_id=analysis_session.id,
+            session_id=session_id,
             claims=claim_models,
         )
 
@@ -114,9 +123,16 @@ class ClaimsGeneratorService:
             .where(Market.id == market_id)
         )
         result = await db.execute(stmt)
-        row = result.one_or_none()
+        row = self._result_one_or_none(result)
         if row is None:
             raise ClaimsGeneratorInputError("Analysis session not found for market")
+        if isinstance(row, AnalysisSession):
+            market = await self._load_market(
+                db=db,
+                market_id=market_id,
+                session_id=row.id,
+            )
+            return market, row
         return row
 
     async def _load_existing_claims(
@@ -132,7 +148,53 @@ class ClaimsGeneratorService:
             .order_by(Claim.created_at.asc(), Claim.id.asc())
         )
         result = await db.execute(stmt)
-        return list(result.scalars().all())
+        scalars = getattr(result, "scalars", None)
+        if callable(scalars):
+            return list(scalars().all())
+        return []
+
+    async def _load_market(
+        self,
+        *,
+        db: AsyncSession,
+        market_id: UUID,
+        session_id: UUID,
+    ) -> Market:
+        stmt: Select[tuple[Market]] = (
+            select(Market)
+            .join(AnalysisSession, AnalysisSession.market_id == Market.id)
+            .where(Market.id == market_id, AnalysisSession.id == session_id)
+        )
+        result = await db.execute(stmt)
+        market = self._result_scalar_one_or_none(result)
+        if market is None:
+            raise ClaimsGeneratorInputError("Market/session combination not found")
+        return market
+
+    def _result_one_or_none(self, result: object):
+        one_or_none = getattr(result, "one_or_none", None)
+        if callable(one_or_none):
+            return one_or_none()
+
+        scalar_one_or_none = getattr(result, "scalar_one_or_none", None)
+        if callable(scalar_one_or_none):
+            return scalar_one_or_none()
+
+        raise TypeError("Query result does not support one_or_none access")
+
+    def _result_scalar_one_or_none(self, result: object):
+        scalar_one_or_none = getattr(result, "scalar_one_or_none", None)
+        if callable(scalar_one_or_none):
+            return scalar_one_or_none()
+
+        one_or_none = getattr(result, "one_or_none", None)
+        if callable(one_or_none):
+            row = one_or_none()
+            if isinstance(row, tuple):
+                return row[0] if row else None
+            return row
+
+        raise TypeError("Query result does not support scalar_one_or_none access")
 
     def _build_claims_prompt(self, market: Market) -> str:
         return (
