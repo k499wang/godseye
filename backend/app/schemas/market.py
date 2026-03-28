@@ -17,6 +17,23 @@ class MarketResponse(BaseModel):
     volume: float = Field(ge=0.0)
 
 
+class MarketBrowseItem(BaseModel):
+    slug: str
+    title: str
+    description: str
+    url: str
+    image: str | None
+    volume: float
+    volume24hr: float
+    probability: float | None  # None for multi-outcome events
+
+
+class MarketBrowseResponse(BaseModel):
+    markets: list[MarketBrowseItem]
+    cached: bool
+    cache_age_seconds: float
+
+
 class ClaimsGenerateResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
