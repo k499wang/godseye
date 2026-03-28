@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.schemas.market import MarketBrowseItem, MarketBrowseResponse, MarketResponse
+from app.services.geo_enrichment import enrich_with_geo
 from app.services.market_ingestion import market_ingestion_service
 from app.services.polymarket_client import PolymarketClientError, polymarket_client
 from pydantic import BaseModel, HttpUrl
@@ -51,8 +52,9 @@ async def import_market(
 
 
 async def _fetch_and_cache() -> MarketBrowseResponse:
-    """Fetch from Gamma API, populate cache, return response."""
+    """Fetch from Gamma API, geo-enrich via Gemini, populate cache, return response."""
     raw = await polymarket_client.fetch_active_events(limit=20)
+    raw = await enrich_with_geo(raw)
     items = [MarketBrowseItem(**r) for r in raw]
     now = time.time()
     _browse_cache["data"] = items
