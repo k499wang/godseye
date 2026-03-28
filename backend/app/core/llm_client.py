@@ -281,7 +281,7 @@ class LLMClient:
         if not cleaned:
             raise ValueError("LLM returned an empty response for a JSON-format request")
 
-        parsed = json.loads(cleaned)
+        parsed = json.loads(cleaned, strict=False)
         return json.dumps(parsed)
 
     def _extract_apollo_results(self, payload: Any) -> list[dict[str, Any]]:

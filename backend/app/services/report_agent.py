@@ -233,17 +233,16 @@ Draft the full report as a JSON object with exactly these fields:
 
 Return ONLY valid JSON."""
 
-        response = await llm_client.complete(
-            prompt=prompt,
-            model=MODEL_GEMINI_FLASH,
-            response_format="json",
-        )
-
         try:
+            response = await llm_client.complete(
+                prompt=prompt,
+                model=MODEL_GEMINI_FLASH,
+                response_format="json",
+            )
             parsed = json.loads(response)
             if isinstance(parsed, dict) and "summary" in parsed:
                 return parsed
-        except (json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
         return self._fallback_draft(sim_summary)
@@ -310,13 +309,12 @@ Return ONLY valid JSON with exactly these fields:
 - "trust_insights": string (1-2 paragraphs)
 - "recommendation": string (1 paragraph)"""
 
-        response = await llm_client.complete(
-            prompt=prompt,
-            model=MODEL_GEMINI_FLASH,
-            response_format="json",
-        )
-
         try:
+            response = await llm_client.complete(
+                prompt=prompt,
+                model=MODEL_GEMINI_FLASH,
+                response_format="json",
+            )
             parsed = json.loads(response)
             if isinstance(parsed, dict) and "summary" in parsed:
                 return ReportData(
@@ -326,7 +324,7 @@ Return ONLY valid JSON with exactly these fields:
                     trust_insights=str(parsed.get("trust_insights", draft.get("trust_insights", ""))),
                     recommendation=str(parsed.get("recommendation", draft.get("recommendation", ""))),
                 )
-        except (json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
         # Fall back to draft content
