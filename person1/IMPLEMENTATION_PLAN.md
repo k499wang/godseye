@@ -23,7 +23,7 @@ You own:
 - app config and database setup
 - SQLAlchemy models
 - Pydantic schemas
-- Alembic migrations
+- Supabase SQL schema management
 - Polymarket client
 - Market ingestion service
 - API route shells
@@ -64,7 +64,7 @@ You need these paths in the backend:
 - `backend/app/api/routes/claims.py`
 - `backend/app/api/routes/simulations.py`
 - `backend/app/api/routes/reports.py`
-- `backend/alembic/`
+- `shared_contracts/supabase_schema.sql`
 
 ## Step-By-Step Plan
 
@@ -229,24 +229,23 @@ Definition of done:
 - [ ] ORM graph supports all planned route queries
 - [ ] No relationship naming conflicts with Person 2 or Person 3 code
 
-### Step 7: Add Alembic and generate the initial migration
+### Step 7: Keep schema changes in Supabase SQL
 
 Goal:
 
-- Get the schema into a repeatable DB migration flow.
+- Keep the database schema aligned through the shared Supabase SQL file.
 
 Tasks:
 
-- [ ] Configure Alembic
-- [ ] Point Alembic metadata at your SQLAlchemy Base
-- [ ] Generate initial migration
-- [ ] Review migration manually before applying
-- [ ] Apply migration to local or target Postgres
+- [ ] Update `shared_contracts/supabase_schema.sql` when model contracts change
+- [ ] Keep SQLAlchemy model definitions aligned with the Supabase SQL
+- [ ] Review SQL manually before applying in Supabase
+- [ ] Apply schema changes through Supabase SQL editor or SQL files
 
 Definition of done:
 
-- [ ] Fresh database can be created from migrations
-- [ ] Teammates can pull and run the schema reliably
+- [ ] Fresh database can be created from the shared SQL file
+- [ ] Teammates can apply the same schema without migration tooling
 
 ### Step 8: Wire Person 2 service boundaries
 
