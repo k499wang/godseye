@@ -59,7 +59,7 @@ _LAVA_GEMINI_CHAT_URL = (
 # Apollo.io via Lava forward proxy (API service, no format translation needed)
 _LAVA_APOLLO_URL = (
     "https://api.lava.so/v1/forward?u="
-    + _urlquote("https://api.apollo.io/api/v1/mixed_people/search", safe="")
+    + _urlquote("https://api.apollo.io/api/v1/mixed_people/api_search", safe="")
 )
 
 _K2_MODEL_ID = "openai/MBZUAI-IFM/K2-Think-v2"
@@ -309,18 +309,22 @@ class LLMClient:
         title = (
             profile.get("title") or profile.get("job_title") or profile.get("headline")
         )
+        org = profile.get("organization") or {}
         company = (
             profile.get("company")
             or profile.get("organization_name")
+            or org.get("name")
             or profile.get("account", {}).get("name")
         )
         industry = (
             profile.get("industry")
             or profile.get("organization_industry")
+            or org.get("industry")
             or profile.get("account", {}).get("industry")
+            or "Finance"
         )
 
-        if not title or not company or not industry:
+        if not title or not company:
             return None
 
         normalized = {
