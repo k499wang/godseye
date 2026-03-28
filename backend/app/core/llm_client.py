@@ -46,8 +46,8 @@ class LLMClient:
     """
 
     def __init__(self) -> None:
-        self._lava_api_key: str = os.getenv("LAVA_KEY", "")
-        self._together_api_key: str = os.getenv("TOGETHER_KEY", "")
+        self._lava_api_key: str = os.getenv("LAVA_API_KEY", "")
+        self._together_api_key: str = os.getenv("TOGETHER_API_KEY", "")
 
     # ------------------------------------------------------------------
     # Public interface
