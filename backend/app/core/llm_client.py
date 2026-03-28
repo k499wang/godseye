@@ -156,8 +156,7 @@ class LLMClient:
             raise RuntimeError("Missing LAVA_API_KEY for Apollo access")
 
         payload = {
-            "person_titles": job_titles,
-            "q_keywords": " ".join(keywords),
+            "person_titles": job_titles[:4],
             "per_page": limit,
             "page": 1,
         }
