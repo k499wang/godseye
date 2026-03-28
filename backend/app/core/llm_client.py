@@ -14,10 +14,14 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Optional
+import re
+from typing import Any
 
 import httpx
-from litellm import acompletion
+import litellm
+from litellm import acompletion  # pyright: ignore[reportUnknownVariableType]
+
+litellm.suppress_debug_info = True
 
 # ---------------------------------------------------------------------------
 # Model name constants — use these everywhere; never hardcode the strings
@@ -33,7 +37,8 @@ _LAVA_MODEL_MAP = {
 }
 
 _DEFAULT_LAVA_BASE_URL = "https://gateway.lavanet.xyz/api/v1"
-_K2_MODEL_ID = "together_ai/Kindo/K2-Think-V2"
+_K2_MODEL_ID = "openai/MBZUAI-IFM/K2-Think-v2"
+_K2_BASE_URL = "https://api.k2think.ai/v1"
 
 _JSON_SUFFIX = (
     "\n\nRespond with valid JSON only. Do not include any text outside the JSON object."
@@ -52,6 +57,7 @@ class LLMClient:
         self._together_api_key: str = os.getenv("TOGETHER_API_KEY") or os.getenv(
             "TOGETHER_KEY", ""
         )
+        self._k2_api_key: str = os.getenv("K2_API_KEY") or self._together_api_key
         self._lava_base_url: str = os.getenv(
             "LAVA_BASE_URL", _DEFAULT_LAVA_BASE_URL
         ).rstrip("/")
@@ -64,7 +70,7 @@ class LLMClient:
             f"{self._lava_base_url}/apollo/search",
         )
         timeout_seconds = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
-        self._timeout = httpx.Timeout(timeout_seconds)
+        self._timeout: httpx.Timeout = httpx.Timeout(timeout_seconds)
 
     # ------------------------------------------------------------------
     # Public interface
@@ -73,7 +79,7 @@ class LLMClient:
     async def complete(
         self,
         prompt: str,
-        system: Optional[str] = None,
+        system: str | None = None,
         model: str = MODEL_GEMINI_FLASH,
         response_format: str = "text",  # "text" or "json"
     ) -> str:
@@ -111,7 +117,7 @@ class LLMClient:
         job_titles: list[str],
         keywords: list[str],
         limit: int = 12,
-    ) -> list[dict[str, Any]]:
+    ) -> list[dict[str, object]]:
         """
         Search Apollo.io via Lava and return a list of professional profile dicts.
         Each dict contains at minimum: title, company, industry.
@@ -151,7 +157,7 @@ class LLMClient:
     async def _complete_with_lava(
         self,
         prompt: str,
-        system: Optional[str],
+        system: str | None,
         model: str,
     ) -> str:
         if not self._lava_api_key:
@@ -177,21 +183,20 @@ class LLMClient:
     async def _complete_with_k2(
         self,
         prompt: str,
-        system: Optional[str],
+        system: str | None,
     ) -> str:
-        if not self._together_api_key:
-            raise RuntimeError("Missing TOGETHER_API_KEY for k2-think model call")
+        if not self._k2_api_key:
+            raise RuntimeError("Missing K2_API_KEY for k2-think model call")
 
         response = await acompletion(
-            api_key=self._together_api_key,
+            api_key=self._k2_api_key,
+            api_base=_K2_BASE_URL,
             model=_K2_MODEL_ID,
             messages=self._build_messages(prompt=prompt, system=system),
         )
         return self._extract_message_content(response)
 
-    def _build_messages(
-        self, prompt: str, system: Optional[str]
-    ) -> list[dict[str, str]]:
+    def _build_messages(self, prompt: str, system: str | None) -> list[dict[str, str]]:
         messages: list[dict[str, str]] = []
         if system:
             messages.append({"role": "system", "content": system})
@@ -231,6 +236,11 @@ class LLMClient:
 
     def _normalize_json_response(self, response_text: str) -> str:
         cleaned = response_text.strip()
+
+        # Strip reasoning tags emitted by chain-of-thought models (e.g. k2-think)
+        cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL).strip()
+
+        # Strip markdown fences
         if cleaned.startswith("```"):
             lines = cleaned.splitlines()
             if lines:
@@ -263,7 +273,7 @@ class LLMClient:
 
     def _normalize_apollo_profile(
         self, profile: dict[str, Any]
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         title = (
             profile.get("title") or profile.get("job_title") or profile.get("headline")
         )

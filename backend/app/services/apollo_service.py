@@ -42,8 +42,7 @@ class ApolloService:
         )
 
         real_profiles = [
-            self._to_professional_background(result)
-            for result in apollo_results
+            self._to_professional_background(result) for result in apollo_results
         ]
 
         if len(real_profiles) >= 6:
@@ -116,7 +115,9 @@ class ApolloService:
         try:
             envelope = SyntheticProfilesEnvelope.model_validate(payload)
         except ValidationError as exc:
-            raise ValueError("Invalid synthetic profile payload returned by LLM") from exc
+            raise ValueError(
+                "Invalid synthetic profile payload returned by LLM"
+            ) from exc
 
         return [
             ProfessionalBackground(
@@ -128,13 +129,17 @@ class ApolloService:
             for profile in envelope.profiles[:desired_count]
         ]
 
-    def _to_professional_background(self, payload: dict[str, object]) -> ProfessionalBackground:
+    def _to_professional_background(
+        self, payload: dict[str, object]
+    ) -> ProfessionalBackground:
         title = str(payload.get("title", "")).strip()
         company = str(payload.get("company", "")).strip()
         industry = str(payload.get("industry", "")).strip()
 
         if not title or not company or not industry:
-            raise ValueError("Apollo payload missing required professional background fields")
+            raise ValueError(
+                "Apollo payload missing required professional background fields"
+            )
 
         return ProfessionalBackground(
             title=title,
