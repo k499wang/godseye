@@ -125,6 +125,15 @@ class LLMClient:
                 prompt=prompt_to_send,
                 system=system,
             )
+            # Strip chain-of-thought reasoning block.
+            # k2-think emits </think> without an opening <think> tag, so split on
+            # </think> and take the text after it; fall back to the full response.
+            if "</think>" in response_text:
+                response_text = response_text.split("</think>", 1)[-1].strip()
+            else:
+                response_text = re.sub(
+                    r"<think>.*?</think>", "", response_text, flags=re.DOTALL
+                ).strip()
         else:
             raise ValueError(f"Unsupported model '{model}'")
 
