@@ -25,7 +25,7 @@ from app.services.claims_generator import claims_generator
 from app.services.market_ingestion import market_ingestion_service
 from app.workers.simulation_worker import run_simulation
 
-MARKET_URL = "https://polymarket.com/event/us-x-iran-ceasefire-by"
+MARKET_URL = "https://polymarket.com/event/largest-ipo-by-market-cap-in-2026-287"
 SEP = "=" * 60
 TOTAL_STEPS = 9
 
