@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.llm_client import MODEL_GEMINI_PRO, llm_client
+from app.core.llm_client import MODEL_GEMINI_FLASH, llm_client
 from app.models.claim import Claim
 from app.models.market import Market
 from app.models.session import AnalysisSession
@@ -80,7 +80,7 @@ class ClaimsGeneratorService:
         try:
             raw_response = await llm_client.complete(
                 prompt=prompt,
-                model=MODEL_GEMINI_PRO,
+                model=MODEL_GEMINI_FLASH,
                 response_format="json",
             )
         except RuntimeError as exc:
