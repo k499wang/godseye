@@ -117,7 +117,8 @@ class ClaimsGeneratorService:
         row = result.one_or_none()
         if row is None:
             raise ClaimsGeneratorInputError("Analysis session not found for market")
-        return row
+        market, analysis_session = row
+        return market, analysis_session
 
     async def _load_existing_claims(
         self,
