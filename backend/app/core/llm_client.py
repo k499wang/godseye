@@ -5,9 +5,13 @@ Import pattern (everyone uses this singleton, never instantiate LLMClient direct
     from app.core.llm_client import llm_client
 
 Routing:
-    "gemini-flash"  → gemini-1.5-flash-002 via Lava HTTP API   (fast; simulation ticks)
-    "gemini-pro"    → gemini-1.5-pro-002 via Lava HTTP API     (smart; claims + report drafting)
-    "k2-think"      → Kindo/K2-Think-V2 via LiteLLM            (reasoning; world-build + report planning)
+    "gemini-flash"  → gemini-2.0-flash via Lava forward proxy   (fast; simulation ticks)
+    "gemini-pro"    → gemini-2.5-pro via Lava forward proxy      (smart; claims + report drafting)
+    "k2-think"      → Kindo/K2-Think-V2 via LiteLLM              (reasoning; world-build + report planning)
+
+Lava (lava.so) is an AI gateway proxy. Both models use the forward proxy pointing
+at Google's built-in OpenAI-compatible endpoint — no format translation needed:
+    POST https://api.lava.so/v1/forward?u=<url-encoded-google-openai-compat-endpoint>
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ import json
 import os
 import re
 from typing import Any
+from urllib.parse import quote as _urlquote
 
 import httpx
 import litellm
@@ -30,13 +35,33 @@ MODEL_GEMINI_FLASH = "gemini-flash"
 MODEL_GEMINI_PRO = "gemini-pro"
 MODEL_K2_THINK = "k2-think"
 
-# Internal mapping: model constant → actual model id used by the provider
+# Internal mapping: model constant → actual model id sent to Google
 _LAVA_MODEL_MAP = {
-    MODEL_GEMINI_FLASH: "gemini-1.5-flash-002",
-    MODEL_GEMINI_PRO: "gemini-1.5-pro-002",
+    MODEL_GEMINI_FLASH: "gemini-2.0-flash",
+    MODEL_GEMINI_PRO: "gemini-2.5-pro",
 }
 
-_DEFAULT_LAVA_BASE_URL = "https://gateway.lavanet.xyz/api/v1"
+# ---------------------------------------------------------------------------
+# Lava proxy endpoints
+# ---------------------------------------------------------------------------
+_DEFAULT_LAVA_BASE_URL = "https://api.lava.so/v1"
+
+# Gemini via Lava forward proxy → Google's OpenAI-compatible endpoint.
+# Google natively accepts OpenAI messages[] format here, so no rewrite needed.
+_LAVA_GEMINI_CHAT_URL = (
+    "https://api.lava.so/v1/forward?u="
+    + _urlquote(
+        "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        safe="",
+    )
+)
+
+# Apollo.io via Lava forward proxy (API service, no format translation needed)
+_LAVA_APOLLO_URL = (
+    "https://api.lava.so/v1/forward?u="
+    + _urlquote("https://api.apollo.io/api/v1/mixed_people/search", safe="")
+)
+
 _K2_MODEL_ID = "openai/MBZUAI-IFM/K2-Think-v2"
 _K2_BASE_URL = "https://api.k2think.ai/v1"
 
@@ -58,16 +83,11 @@ class LLMClient:
             "TOGETHER_KEY", ""
         )
         self._k2_api_key: str = os.getenv("K2_API_KEY") or self._together_api_key
-        self._lava_base_url: str = os.getenv(
-            "LAVA_BASE_URL", _DEFAULT_LAVA_BASE_URL
-        ).rstrip("/")
         self._lava_chat_completions_url: str = os.getenv(
-            "LAVA_CHAT_COMPLETIONS_URL",
-            f"{self._lava_base_url}/chat/completions",
+            "LAVA_CHAT_COMPLETIONS_URL", _LAVA_GEMINI_CHAT_URL,
         )
         self._lava_apollo_url: str = os.getenv(
-            "LAVA_APOLLO_URL",
-            f"{self._lava_base_url}/apollo/search",
+            "LAVA_APOLLO_URL", _LAVA_APOLLO_URL,
         )
         timeout_seconds = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
         self._timeout: httpx.Timeout = httpx.Timeout(timeout_seconds)
@@ -127,9 +147,10 @@ class LLMClient:
             raise RuntimeError("Missing LAVA_API_KEY for Apollo access")
 
         payload = {
-            "job_titles": job_titles,
-            "keywords": keywords,
-            "limit": limit,
+            "person_titles": job_titles,
+            "q_keywords": " ".join(keywords),
+            "per_page": limit,
+            "page": 1,
         }
 
         try:
@@ -206,7 +227,6 @@ class LLMClient:
     def _lava_headers(self) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self._lava_api_key}",
-            "X-API-Key": self._lava_api_key,
             "Content-Type": "application/json",
         }
 

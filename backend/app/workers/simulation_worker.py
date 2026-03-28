@@ -4,7 +4,7 @@ Simulation Worker — Person 3
 Orchestrator that runs the full pipeline with DB integration:
   1. world_builder.build_world()  → 12 agents  → persist to DB
   2. simulation_runner.run()      → 30-tick sim → persist tick_data + claim_shares
-  3. (future) report_agent        → final report
+  3. report_agent.generate()      → final report → persist to DB
 
 Usage (wired by Person 1 into POST /api/simulations/{id}/start):
     from app.workers.simulation_worker import run_simulation
@@ -186,6 +186,33 @@ async def _load_claims_from_db(db, session_id: str) -> list[Claim] | None:
     """Load claims from DB. Returns None if DB unavailable or no claims found."""
     if not db:
         return None
+    try:
+        from sqlalchemy import select
+        from app.models.claim import Claim as ClaimModel
+
+        result = await db.execute(
+            select(ClaimModel).where(ClaimModel.session_id == UUID(session_id))
+        )
+        db_claims = result.scalars().all()
+        if not db_claims:
+            return None
+        return [
+            Claim(
+                id=str(c.id),
+                text=c.text,
+                stance=c.stance,
+                strength_score=float(c.strength_score),
+                novelty_score=float(c.novelty_score),
+            )
+            for c in db_claims
+        ]
+    except Exception as e:
+        logger.warning("Failed to load claims from DB: %s", e)
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        return None
 
 
 async def _load_agents_from_db(db, simulation_id: str):
@@ -223,33 +250,6 @@ async def _load_agents_from_db(db, simulation_id: str):
         ]
     except Exception as e:
         logger.warning("Failed to load agents from DB: %s", e)
-        try:
-            await db.rollback()
-        except Exception:
-            pass
-        return None
-    try:
-        from sqlalchemy import select
-        from app.models.claim import Claim as ClaimModel
-
-        result = await db.execute(
-            select(ClaimModel).where(ClaimModel.session_id == UUID(session_id))
-        )
-        db_claims = result.scalars().all()
-        if not db_claims:
-            return None
-        return [
-            Claim(
-                id=str(c.id),
-                text=c.text,
-                stance=c.stance,
-                strength_score=float(c.strength_score),
-                novelty_score=float(c.novelty_score),
-            )
-            for c in db_claims
-        ]
-    except Exception as e:
-        logger.warning("Failed to load claims from DB: %s", e)
         try:
             await db.rollback()
         except Exception:
