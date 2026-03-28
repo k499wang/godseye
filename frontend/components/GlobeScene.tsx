@@ -78,15 +78,19 @@ function Atmosphere() {
 function MarkerContent({
   event,
   isActive,
+  isVisible,
   onSelect,
 }: {
   event: GlobeEvent;
   isActive: boolean;
+  isVisible: boolean;
   onSelect: (e: GlobeEvent) => void;
 }) {
   const [hovered, setHovered] = useState(false);
   const color = CATEGORY_COLOR[event.category] ?? "#F59E0B";
   const size = isActive || hovered ? 20 : 14;
+
+  if (!isVisible) return null;
 
   return (
     <div
@@ -168,13 +172,15 @@ function MarkerContent({
 
 interface EarthSystemProps {
   events: GlobeEvent[];
+  visibleIds: Set<string>;
   activeEvent: GlobeEvent | null;
   onEventSelect: (e: GlobeEvent) => void;
+  isAutoSpinning: boolean;
   /** Exposes the rotating group so CameraController can read its world matrix */
   groupRef: React.RefObject<THREE.Group | null>;
 }
 
-function EarthSystem({ events, activeEvent, onEventSelect, groupRef }: EarthSystemProps) {
+function EarthSystem({ events, visibleIds, activeEvent, onEventSelect, isAutoSpinning, groupRef }: EarthSystemProps) {
   const meshRef = useRef<THREE.Object3D>(null);
   const texture = useTexture(
     "https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
@@ -182,7 +188,7 @@ function EarthSystem({ events, activeEvent, onEventSelect, groupRef }: EarthSyst
 
   // Idle spin — rotate the GROUP so markers stay in sync automatically
   useFrame((_, delta) => {
-    if (groupRef.current) groupRef.current.rotation.y += delta * 0.04;
+    if (isAutoSpinning && groupRef.current) groupRef.current.rotation.y += delta * 0.04;
   });
 
   return (
@@ -213,6 +219,7 @@ function EarthSystem({ events, activeEvent, onEventSelect, groupRef }: EarthSyst
             <MarkerContent
               event={evt}
               isActive={activeEvent?.id === evt.id}
+              isVisible={visibleIds.has(evt.id)}
               onSelect={onEventSelect}
             />
           </Html>
@@ -308,14 +315,20 @@ function CameraController({
 
 function Scene({
   events,
+  visibleIds,
   activeEvent,
   onEventSelect,
   onFlyComplete,
+  onInteraction,
+  isAutoSpinning,
 }: {
   events: GlobeEvent[];
+  visibleIds: Set<string>;
   activeEvent: GlobeEvent | null;
   onEventSelect: (e: GlobeEvent) => void;
   onFlyComplete: () => void;
+  onInteraction: () => void;
+  isAutoSpinning: boolean;
 }) {
   const earthGroupRef = useRef<THREE.Group>(null);
   const orbitRef = useRef<any>(null);
@@ -331,8 +344,10 @@ function Scene({
       <Suspense fallback={null}>
         <EarthSystem
           events={events}
+          visibleIds={visibleIds}
           activeEvent={activeEvent}
           onEventSelect={onEventSelect}
+          isAutoSpinning={isAutoSpinning}
           groupRef={earthGroupRef}
         />
         <Atmosphere />
@@ -349,12 +364,11 @@ function Scene({
         ref={orbitRef}
         enableZoom={false}
         enablePan={false}
-        autoRotate={!activeEvent}
-        autoRotateSpeed={0.25}
         enableDamping
         dampingFactor={0.06}
         minPolarAngle={Math.PI * 0.2}
         maxPolarAngle={Math.PI * 0.8}
+        onStart={onInteraction}
       />
     </>
   );
@@ -366,14 +380,20 @@ function Scene({
 
 export default function GlobeScene({
   events,
+  visibleIds,
   activeEvent,
   onEventSelect,
   onFlyComplete,
+  onInteraction,
+  isAutoSpinning,
 }: {
   events: GlobeEvent[];
+  visibleIds: Set<string>;
   activeEvent: GlobeEvent | null;
   onEventSelect: (e: GlobeEvent) => void;
   onFlyComplete: () => void;
+  onInteraction: () => void;
+  isAutoSpinning: boolean;
 }) {
   return (
     <Canvas
@@ -383,9 +403,12 @@ export default function GlobeScene({
     >
       <Scene
         events={events}
+        visibleIds={visibleIds}
         activeEvent={activeEvent}
         onEventSelect={onEventSelect}
         onFlyComplete={onFlyComplete}
+        onInteraction={onInteraction}
+        isAutoSpinning={isAutoSpinning}
       />
     </Canvas>
   );

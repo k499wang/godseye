@@ -1,9 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState, useCallback } from "react";
-import { EventFocusPanel } from "@/components/EventFocusPanel";
-import { GLOBE_EVENTS } from "@/lib/globeData";
+import { useCallback } from "react";
+import { GlobeProvider, useGlobe } from "@/components/GlobeContext";
+import { FilterBar } from "@/components/FilterBar";
+import { TimelineSlider } from "@/components/TimelineSlider";
+import { EventPanel } from "@/components/EventPanel";
 import type { GlobeEvent } from "@/lib/globeData";
 
 // Three.js must not run in SSR
@@ -11,10 +13,6 @@ const GlobeScene = dynamic(() => import("@/components/GlobeScene"), {
   ssr: false,
   loading: () => <GlobeLoader />,
 });
-
-// ---------------------------------------------------------------------------
-// Loading state while canvas initialises
-// ---------------------------------------------------------------------------
 
 function GlobeLoader() {
   return (
@@ -31,7 +29,7 @@ function GlobeLoader() {
       />
       <span
         style={{
-          fontFamily: "var(--font-mono, monospace)",
+          fontFamily: "var(--font-mono)",
           fontSize: 10,
           letterSpacing: "0.3em",
           color: "#4b5563",
@@ -44,41 +42,40 @@ function GlobeLoader() {
 }
 
 // ---------------------------------------------------------------------------
-// Legend pill
+// Inner page — reads from GlobeContext
 // ---------------------------------------------------------------------------
 
-const CATEGORIES = [
-  { key: "monetary", label: "MONETARY", color: "#F59E0B" },
-  { key: "geopolitical", label: "GEOPOLITICAL", color: "#EF4444" },
-  { key: "tech", label: "TECHNOLOGY", color: "#06B6D4" },
-  { key: "energy", label: "ENERGY", color: "#10B981" },
-  { key: "macro", label: "MACRO", color: "#F97316" },
-] as const;
+function GlobePage() {
+  const {
+    events,
+    visibleIds,
+    selectedEventId,
+    setSelectedEventId,
+    isAutoSpinning,
+    stopAutoSpin,
+  } = useGlobe();
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
+  const activeEvent =
+    events.find((e) => e.id === selectedEventId) ?? null;
 
-export default function GlobePage() {
-  const [activeEvent, setActiveEvent] = useState<GlobeEvent | null>(null);
-  const handleEventSelect = useCallback((event: GlobeEvent) => {
-    setActiveEvent(event);
-  }, []);
+  const handleEventSelect = useCallback(
+    (event: GlobeEvent) => {
+      stopAutoSpin();
+      setSelectedEventId(event.id);
+    },
+    [setSelectedEventId, stopAutoSpin]
+  );
 
-  const handleClose = useCallback(() => {
-    setActiveEvent(null);
-  }, []);
+  const handleFlyComplete = useCallback(() => {}, []);
 
-  const handleFlyComplete = useCallback(() => {
-    // fly complete — reserved for future use (e.g. triggering panel entrance)
-  }, []);
+  const panelOpen = !!selectedEventId;
 
   return (
     <main
-      className="relative w-full h-screen overflow-hidden"
-      style={{ background: "#050509" }}
+      className="relative w-screen h-screen overflow-hidden"
+      style={{ background: "var(--bg-base)" }}
     >
-      {/* ── Deep-space vignette ── */}
+      {/* Deep-space vignette */}
       <div
         className="absolute inset-0 pointer-events-none z-10"
         style={{
@@ -87,40 +84,41 @@ export default function GlobePage() {
         }}
       />
 
-      {/* ── Globe canvas ── */}
+      {/* Globe — full screen base layer */}
       <div className="absolute inset-0 z-0">
         <GlobeScene
-          events={GLOBE_EVENTS}
+          events={events}
+          visibleIds={visibleIds}
           activeEvent={activeEvent}
           onEventSelect={handleEventSelect}
           onFlyComplete={handleFlyComplete}
+          onInteraction={stopAutoSpin}
+          isAutoSpinning={isAutoSpinning}
         />
       </div>
 
-      {/* ── Header ── */}
+      {/* Header */}
       <header
         className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-6 py-4"
         style={{
           background:
             "linear-gradient(180deg, rgba(5,5,9,0.8) 0%, transparent 100%)",
+          pointerEvents: "none",
         }}
       >
-        {/* Wordmark */}
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <div
-              style={{
-                width: 8,
-                height: 8,
-                background: "#F59E0B",
-                boxShadow: "0 0 12px #F59E0B",
-              }}
-            />
-          </div>
+        <div className="flex items-center gap-3" style={{ pointerEvents: "auto" }}>
+          <div
+            style={{
+              width: 8,
+              height: 8,
+              background: "#F59E0B",
+              boxShadow: "0 0 12px #F59E0B",
+            }}
+          />
           <div>
             <span
               style={{
-                fontFamily: "var(--font-mono, monospace)",
+                fontFamily: "var(--font-mono)",
                 fontSize: 13,
                 fontWeight: 700,
                 letterSpacing: "0.3em",
@@ -131,7 +129,7 @@ export default function GlobePage() {
             </span>
             <span
               style={{
-                fontFamily: "var(--font-mono, monospace)",
+                fontFamily: "var(--font-mono)",
                 fontSize: 9,
                 letterSpacing: "0.25em",
                 color: "#374151",
@@ -144,10 +142,9 @@ export default function GlobePage() {
           </div>
         </div>
 
-        {/* Status bar */}
         <div
           style={{
-            fontFamily: "var(--font-mono, monospace)",
+            fontFamily: "var(--font-mono)",
             fontSize: 9,
             letterSpacing: "0.2em",
             color: "#4b5563",
@@ -159,76 +156,53 @@ export default function GlobePage() {
           <span>
             <span style={{ color: "#10B981" }}>●</span> LIVE
           </span>
-          <span>{GLOBE_EVENTS.length} ACTIVE MARKETS</span>
+          <span>{events.length} ACTIVE MARKETS</span>
           <span style={{ color: "#374151" }}>
             {new Date().toUTCString().slice(0, 16).toUpperCase()}
           </span>
         </div>
       </header>
 
-      {/* ── Bottom legend + hint ── */}
+      {/* Filter bar — top-center overlay */}
+      <FilterBar />
+
+      {/* Timeline slider — bottom overlay, shifts left when panel open */}
+      <TimelineSlider rightOffset={panelOpen ? 400 : 0} />
+
+      {/* Event panel — right slide-in */}
+      <EventPanel />
+
+      {/* Bottom hint — fades when panel open */}
       <div
-        className="absolute bottom-0 left-0 right-0 z-20 flex items-end justify-between px-6 py-5"
+        className="absolute bottom-0 left-0 z-10 pb-16 pl-6 pointer-events-none"
         style={{
-          background:
-            "linear-gradient(0deg, rgba(5,5,9,0.85) 0%, transparent 100%)",
-          pointerEvents: activeEvent ? "none" : "auto",
-          opacity: activeEvent ? 0 : 1,
+          opacity: panelOpen ? 0 : 1,
           transition: "opacity 0.35s ease",
         }}
       >
-        {/* Category legend */}
-        <div className="flex items-center gap-4 flex-wrap">
-          {CATEGORIES.map((cat) => (
-            <div
-              key={cat.key}
-              className="flex items-center gap-1.5"
-              style={{
-                fontFamily: "var(--font-mono, monospace)",
-                fontSize: 9,
-                letterSpacing: "0.2em",
-                color: "#6b7280",
-              }}
-            >
-              <div
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: cat.color,
-                  boxShadow: `0 0 4px ${cat.color}`,
-                }}
-              />
-              {cat.label}
-            </div>
-          ))}
-        </div>
-
-        {/* Interaction hint */}
         <div
           style={{
-            fontFamily: "var(--font-mono, monospace)",
+            fontFamily: "var(--font-mono)",
             fontSize: 9,
             letterSpacing: "0.2em",
             color: "#374151",
-            textAlign: "right",
           }}
         >
           DRAG TO ROTATE · CLICK MARKER TO ANALYSE
         </div>
       </div>
-
-      {/* ── Event focus panel ── */}
-      <EventFocusPanel event={activeEvent} onClose={handleClose} />
-
-      {/* ── Scanline overlay (subtle texture) ── */}
-      <div
-        className="absolute inset-0 pointer-events-none z-50"
-        style={{
-          backgroundImage:
-            "repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.012) 3px, rgba(0,0,0,0.012) 4px)",
-        }}
-      />
     </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Export — wraps with provider
+// ---------------------------------------------------------------------------
+
+export default function Page() {
+  return (
+    <GlobeProvider>
+      <GlobePage />
+    </GlobeProvider>
   );
 }
