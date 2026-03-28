@@ -15,7 +15,10 @@ except ModuleNotFoundError as exc:
     ) from exc
 
 from app.main import app
+from app.schemas.claim import ClaimSchema
+from app.schemas.market import ClaimsGenerateResponse
 from app.schemas.market import MarketResponse
+from app.services.claims_generator import claims_generator
 from app.services.market_ingestion import market_ingestion_service
 
 
@@ -69,7 +72,36 @@ def test_import_market_invalid_domain(client: TestClient) -> None:
 
 def test_generate_claims(client: TestClient) -> None:
     market_id = str(uuid4())
-    response = client.post(f"/api/sessions/{market_id}/claims/generate")
+
+    async def fake_generate(self, *, db, market_id):
+        return ClaimsGenerateResponse(
+            session_id=uuid4(),
+            market_id=market_id,
+            claims=[
+                ClaimSchema(
+                    id=uuid4(),
+                    text="Labor market softening increases pressure for a cut.",
+                    stance="yes",
+                    strength_score=0.72,
+                    novelty_score=0.55,
+                ),
+                ClaimSchema(
+                    id=uuid4(),
+                    text="Sticky inflation reduces the case for near-term easing.",
+                    stance="no",
+                    strength_score=0.79,
+                    novelty_score=0.40,
+                ),
+            ],
+        )
+
+    original_generate = claims_generator.generate
+    claims_generator.generate = MethodType(fake_generate, claims_generator)
+    try:
+        response = client.post(f"/api/sessions/{market_id}/claims/generate")
+    finally:
+        claims_generator.generate = original_generate
+
     body = response.json()
 
     assert response.status_code == 200

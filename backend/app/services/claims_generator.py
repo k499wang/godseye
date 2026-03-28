@@ -1,17 +1,15 @@
 """
 Claims Generator Service — Person 2
 
-Generates 20-30 structured claims for a given market using Gemini Pro via LLMClient.
-
-Usage (wired by Person 1 into POST /api/sessions/{market_id}/claims/generate):
-    from app.services.claims_generator import claims_generator
-    result = await claims_generator.generate(db=session, market_id=..., session_id=...)
+Generates structured claims for a market using Gemini Pro.
+Person 1 wires this service into the fixed claims route and persists the result.
 """
 
 from __future__ import annotations
 
 import json
 from decimal import Decimal
+from json import JSONDecodeError
 from uuid import UUID
 
 from pydantic import BaseModel, Field, ValidationError
@@ -24,6 +22,14 @@ from app.models.market import Market
 from app.models.session import AnalysisSession
 from app.schemas.claim import ClaimSchema
 from app.schemas.market import ClaimsGenerateResponse
+
+
+class ClaimsGeneratorInputError(ValueError):
+    pass
+
+
+class ClaimsGeneratorDependencyError(RuntimeError):
+    pass
 
 
 class GeneratedClaimPayload(BaseModel):
@@ -40,24 +46,41 @@ class GeneratedClaimsEnvelope(BaseModel):
 class ClaimsGeneratorService:
     async def generate(
         self,
+        *,
         db: AsyncSession,
         market_id: UUID,
-        session_id: UUID,
     ) -> ClaimsGenerateResponse:
-        market = await self._load_market(
-            db=db, market_id=market_id, session_id=session_id
+        market, analysis_session = await self._load_market_and_session(
+            db=db,
+            market_id=market_id,
         )
+
+        existing_claims = await self._load_existing_claims(
+            db=db,
+            market_id=market_id,
+            session_id=analysis_session.id,
+        )
+        if existing_claims:
+            return self._to_response(
+                market_id=market_id,
+                session_id=analysis_session.id,
+                claims=existing_claims,
+            )
+
         prompt = self._build_claims_prompt(market=market)
-        raw_response = await llm_client.complete(
-            prompt=prompt,
-            model=MODEL_GEMINI_PRO,
-            response_format="json",
-        )
+        try:
+            raw_response = await llm_client.complete(
+                prompt=prompt,
+                model=MODEL_GEMINI_PRO,
+                response_format="json",
+            )
+        except RuntimeError as exc:
+            raise ClaimsGeneratorDependencyError(str(exc)) from exc
 
         claims_payload = self._parse_claims_response(raw_response)
         claim_models = [
             Claim(
-                session_id=session_id,
+                session_id=analysis_session.id,
                 market_id=market_id,
                 text=claim.text.strip(),
                 stance=claim.stance,  # type: ignore[arg-type]
@@ -73,28 +96,43 @@ class ClaimsGeneratorService:
         for claim in claim_models:
             await db.refresh(claim)
 
-        return ClaimsGenerateResponse(
-            session_id=session_id,
+        return self._to_response(
             market_id=market_id,
-            claims=[ClaimSchema.model_validate(claim) for claim in claim_models],
+            session_id=analysis_session.id,
+            claims=claim_models,
         )
 
-    async def _load_market(
+    async def _load_market_and_session(
         self,
+        *,
+        db: AsyncSession,
+        market_id: UUID,
+    ) -> tuple[Market, AnalysisSession]:
+        stmt: Select[tuple[Market, AnalysisSession]] = (
+            select(Market, AnalysisSession)
+            .join(AnalysisSession, AnalysisSession.market_id == Market.id)
+            .where(Market.id == market_id)
+        )
+        result = await db.execute(stmt)
+        row = result.one_or_none()
+        if row is None:
+            raise ClaimsGeneratorInputError("Analysis session not found for market")
+        return row
+
+    async def _load_existing_claims(
+        self,
+        *,
         db: AsyncSession,
         market_id: UUID,
         session_id: UUID,
-    ) -> Market:
-        stmt: Select[tuple[Market]] = (
-            select(Market)
-            .join(AnalysisSession, AnalysisSession.market_id == Market.id)
-            .where(Market.id == market_id, AnalysisSession.id == session_id)
+    ) -> list[Claim]:
+        stmt: Select[tuple[Claim]] = (
+            select(Claim)
+            .where(Claim.market_id == market_id, Claim.session_id == session_id)
+            .order_by(Claim.created_at.asc(), Claim.id.asc())
         )
         result = await db.execute(stmt)
-        market = result.scalar_one_or_none()
-        if market is None:
-            raise ValueError("Market/session combination not found")
-        return market
+        return list(result.scalars().all())
 
     def _build_claims_prompt(self, market: Market) -> str:
         return (
@@ -116,7 +154,11 @@ class ClaimsGeneratorService:
         )
 
     def _parse_claims_response(self, raw_response: str) -> GeneratedClaimsEnvelope:
-        payload = json.loads(raw_response)
+        try:
+            payload = json.loads(raw_response)
+        except JSONDecodeError as exc:
+            raise ValueError("Claims generator returned invalid JSON") from exc
+
         if isinstance(payload, list):
             payload = {"claims": payload}
 
@@ -143,6 +185,19 @@ class ClaimsGeneratorService:
             )
 
         return GeneratedClaimsEnvelope(claims=normalized_claims)
+
+    def _to_response(
+        self,
+        *,
+        market_id: UUID,
+        session_id: UUID,
+        claims: list[Claim],
+    ) -> ClaimsGenerateResponse:
+        return ClaimsGenerateResponse(
+            session_id=session_id,
+            market_id=market_id,
+            claims=[ClaimSchema.model_validate(claim) for claim in claims],
+        )
 
 
 claims_generator = ClaimsGeneratorService()
