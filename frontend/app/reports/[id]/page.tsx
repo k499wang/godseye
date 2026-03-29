@@ -273,7 +273,6 @@ export default function ReportPage({
               </div>
 
               <div className="mt-5 flex flex-wrap gap-3">
-                <Pill>{marketLabel}</Pill>
                 <Pill>{signalTone}</Pill>
                 <Pill tone={probDelta >= 0 ? "success" : "danger"}>{deltaTone}</Pill>
                 {isMock && <Pill>Vol ${formatVolume(MOCK_MARKET.volume)}</Pill>}
