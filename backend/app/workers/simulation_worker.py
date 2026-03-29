@@ -57,14 +57,12 @@ async def run_simulation(
     db = await _get_db_session()
 
     try:
-        # --- Phase 1: Update status to "building" ---
-        await _update_sim_status(db, simulation_id, "building")
-
-        # --- Phase 2: Build World ---
+        # --- Phase 1: Load or build world ---
         agents = await _load_agents_from_db(db, simulation_id)
         if agents:
             logger.info("Loaded %d existing agents for simulation %s", len(agents), simulation_id)
         else:
+            await _update_sim_status(db, simulation_id, "building")
             logger.info("Building world for simulation %s", simulation_id)
             agents = await world_builder.build_world(
                 session_id=session_id,
@@ -76,7 +74,7 @@ async def run_simulation(
             # Persist agents to DB
             await _persist_agents(db, simulation_id, agents)
 
-        # --- Phase 3: Prepare Claims ---
+        # --- Phase 2: Prepare Claims ---
         claim_objects: list[Claim] | None = None
         if claims:
             claim_objects = [
@@ -92,7 +90,7 @@ async def run_simulation(
         else:
             claim_objects = await _load_claims_from_db(db, session_id)
 
-        # --- Phase 4: Run Simulation ---
+        # --- Phase 3: Run Simulation ---
         await _update_sim_status(db, simulation_id, "running")
         result = await simulation_runner.run(
             simulation_id=simulation_id,
@@ -110,10 +108,10 @@ async def run_simulation(
         )
         logger.info("Simulation %s complete: %d ticks", simulation_id, result.current_tick)
 
-        # --- Phase 5: Persist Results ---
+        # --- Phase 4: Persist Results ---
         await _persist_results(db, simulation_id, result)
 
-        # --- Phase 6: Generate Report ---
+        # --- Phase 5: Generate Report ---
         report_data = await _generate_report(
             db, simulation_id, result, market_question, market_probability,
         )
