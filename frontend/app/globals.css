@@ -212,10 +212,6 @@ body::after {
   animation: constellationPulse 2.2s ease-out infinite;
 }
 
-.constellation-node-group {
-  transition: transform 260ms ease, opacity 260ms ease;
-}
-
 /* Smooth transition helper — used on overlay panels */
 .panel-transition {
   transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
