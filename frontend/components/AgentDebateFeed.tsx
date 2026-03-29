@@ -42,6 +42,13 @@ export function AgentDebateFeed({
     return b.confidence - a.confidence;
   });
 
+  const summarizeReasoning = (text: string) => {
+    const compact = text.replace(/\s+/g, " ").trim();
+    if (!compact) return "No short commentary";
+    const sentence = compact.split(/[.!?]/)[0]?.trim() || compact;
+    return sentence.length > 88 ? `${sentence.slice(0, 85)}...` : sentence;
+  };
+
   return (
     <div className="flex h-full flex-col overflow-y-auto rounded-[30px] border border-white/8 bg-[rgba(255,255,255,0.025)] p-4">
       <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-5 border-b border-[rgba(245,158,11,0.16)] bg-[rgba(8,11,18,0.96)] px-4 pb-4 pt-4 backdrop-blur-xl">
@@ -68,18 +75,23 @@ export function AgentDebateFeed({
         >
           <div className="mb-3 flex flex-wrap items-center gap-3">
             <span className="ui-mono rounded-full border border-[rgba(52,211,153,0.3)] bg-[rgba(52,211,153,0.12)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--success)]">
-              Claim share
+              Propagation
             </span>
             <span className="text-sm text-[var(--text-secondary)]">
               {share.from_agent_name} to {share.to_agent_name}
             </span>
           </div>
-          <p className="rounded-[18px] border border-white/8 bg-[rgba(9,14,21,0.55)] p-4 text-base leading-7 text-[var(--text-primary)]">
-            "{share.claim_text}"
-          </p>
-          <p className="mt-3 text-base leading-7 text-[var(--text-secondary)]">
-            {share.commentary}
-          </p>
+          <div className="rounded-[18px] border border-white/8 bg-[rgba(9,14,21,0.55)] p-4">
+            <div className="ui-mono mb-2 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              Active claim
+            </div>
+            <p className="text-sm leading-6 text-[var(--text-primary)]">
+              {summarizeReasoning(share.claim_text)}
+            </p>
+          </div>
+          <div className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
+            {summarizeReasoning(share.commentary)}
+          </div>
         </div>
       ))}
 
@@ -92,10 +104,7 @@ export function AgentDebateFeed({
           const beliefTone = beliefColor(state.belief);
 
           return (
-            <div
-              key={state.agent_id}
-              className="rounded-[24px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-4"
-            >
+            <div key={state.agent_id} className="rounded-[24px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-4">
               <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div
@@ -152,9 +161,9 @@ export function AgentDebateFeed({
                 <span>Confidence {Math.round(state.confidence * 100)}%</span>
               </div>
 
-              <p className="text-base leading-7 text-[var(--text-secondary)]">
-                {state.reasoning}
-              </p>
+              <div className="rounded-[18px] border border-white/6 bg-[rgba(8,11,18,0.46)] px-4 py-3 text-sm leading-6 text-[var(--text-secondary)]">
+                {summarizeReasoning(state.reasoning)}
+              </div>
             </div>
           );
         })}
