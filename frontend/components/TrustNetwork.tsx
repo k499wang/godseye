@@ -1,24 +1,20 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import type { AgentSummary, TickSnapshot } from "@/lib/types";
 import { ARCHETYPE_COLORS } from "@/lib/constants";
 
 interface TrustNetworkProps {
   agents: AgentSummary[];
   tickSnapshot: TickSnapshot | null;
+  size?: number;
+  title?: string;
 }
 
-const RADIUS = 72;
-const CX = 110;
-const CY = 110;
-const SIZE = 220;
-
-function getAgentPosition(index: number, total: number) {
+function getAgentPosition(index: number, total: number, radius: number, cx: number, cy: number) {
   const angle = (index / total) * 2 * Math.PI - Math.PI / 2;
   return {
-    x: CX + RADIUS * Math.cos(angle),
-    y: CY + RADIUS * Math.sin(angle),
+    x: cx + radius * Math.cos(angle),
+    y: cy + radius * Math.sin(angle),
   };
 }
 
@@ -30,13 +26,23 @@ function trustToWidth(trust: number): number {
   return Math.max(0.5, trust * 2.5);
 }
 
-export function TrustNetwork({ agents, tickSnapshot }: TrustNetworkProps) {
+export function TrustNetwork({
+  agents,
+  tickSnapshot,
+  size = 220,
+  title = "TRUST NETWORK",
+}: TrustNetworkProps) {
+  const center = size / 2;
+  const radius = Math.max(56, size * 0.33);
+
   // Build trust map from tick trust_updates + initial trust approximation
   // We'll use trust_updates to show the CURRENT state after this tick
   const trustUpdates = tickSnapshot?.trust_updates ?? [];
 
   // Build a map of agent positions
-  const positions = agents.map((_, i) => getAgentPosition(i, agents.length));
+  const positions = agents.map((_, i) =>
+    getAgentPosition(i, agents.length, radius, center, center)
+  );
 
   // Build edges: draw from trust_updates if present, otherwise show skeleton
   const edges: {
@@ -84,12 +90,12 @@ export function TrustNetwork({ agents, tickSnapshot }: TrustNetworkProps) {
   return (
     <div className="flex flex-col items-center">
       <div className="font-mono text-[9px] tracking-widest text-[#374151] mb-2">
-        TRUST NETWORK
+        {title}
       </div>
       <svg
-        width={SIZE}
-        height={SIZE}
-        viewBox={`0 0 ${SIZE} ${SIZE}`}
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
         className="overflow-visible"
       >
         <defs>

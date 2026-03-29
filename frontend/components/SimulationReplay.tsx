@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { SimulationResponse, TickSnapshot } from "@/lib/types";
-import { ARCHETYPE_COLORS, ARCHETYPE_LABELS } from "@/lib/constants";
 import { BeliefChart } from "./BeliefChart";
 import { AgentDebateFeed } from "./AgentDebateFeed";
-import { TrustNetwork } from "./TrustNetwork";
+import { SocietyGraph, SocietyInspector } from "./SocietyGraph";
 
 interface SimulationReplayProps {
   simulation: SimulationResponse;
@@ -49,6 +48,10 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
       ? simulation.tick_data[simulation.tick_data.length - 1].tick
       : 1
   );
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(
+    simulation.agents[0]?.id ?? null
+  );
+  const [selectedShareIndex, setSelectedShareIndex] = useState<number | null>(null);
 
   const tickData = simulation.tick_data;
   const agents = simulation.agents;
@@ -57,6 +60,11 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
 
   const currentSnapshot: TickSnapshot | null =
     tickData.find((t) => t.tick === currentTick) ?? null;
+
+  useEffect(() => {
+    setSelectedShareIndex(null);
+    setSelectedAgentId((current) => current ?? simulation.agents[0]?.id ?? null);
+  }, [currentTick, simulation.agents]);
 
   const handleTickSelect = useCallback(
     (tick: number) => {
@@ -71,11 +79,20 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
       currentSnapshot.agent_states.length
     : null;
 
+  const handleSelectAgent = useCallback((agentId: string) => {
+    setSelectedAgentId(agentId);
+    setSelectedShareIndex(null);
+  }, []);
+
+  const handleSelectShare = useCallback((shareIndex: number) => {
+    setSelectedShareIndex(shareIndex);
+  }, []);
+
   return (
     <div className="flex h-full flex-col bg-[var(--bg-base)] text-[var(--text-primary)]">
       <div className="flex items-center justify-between gap-4 border-b border-white/8 px-5 py-3">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="eyebrow">Simulation replay</span>
+          <span className="eyebrow">Society simulation</span>
           <span className="ui-mono text-sm text-[var(--text-muted)]">
             {simulation.id.slice(0, 8).toUpperCase()}
           </span>
@@ -170,77 +187,58 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div
           className="flex min-h-0 flex-col border-r border-white/8"
-          style={{ width: "55%" }}
+          style={{ width: "62%" }}
         >
           <div className="flex-1 min-h-0 border-b border-white/6 p-4">
-            <div className="eyebrow mb-3">Belief convergence</div>
-            <div style={{ height: "calc(100% - 24px)" }}>
-              <BeliefChart
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div>
+                <div className="eyebrow mb-1">Agent society</div>
+                <div className="text-sm text-[var(--text-secondary)]">
+                  Claim exchange, factions, and live positions at the selected tick.
+                </div>
+              </div>
+              {currentSnapshot && (
+                <div className="ui-mono rounded-full border border-[rgba(52,211,153,0.24)] bg-[rgba(52,211,153,0.08)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--success)]">
+                  {currentSnapshot.claim_shares.length} active share
+                  {currentSnapshot.claim_shares.length === 1 ? "" : "s"}
+                </div>
+              )}
+            </div>
+            <div className="flex h-[calc(100%-40px)] items-center justify-center rounded-[28px] border border-white/8 bg-[rgba(255,255,255,0.02)]">
+              <SocietyGraph
                 agents={agents}
-                tickData={tickData}
-                currentTick={currentTick}
-                totalTicks={totalTicks}
-                onTickSelect={handleTickSelect}
+                tickSnapshot={currentSnapshot}
+                selectedAgentId={selectedAgentId}
+                selectedShareIndex={selectedShareIndex}
+                onSelectAgent={handleSelectAgent}
+                onSelectShare={handleSelectShare}
               />
             </div>
           </div>
 
           <div className="flex overflow-hidden" style={{ height: 300 }}>
             <div className="flex-shrink-0 border-r border-white/6 p-4">
-              <TrustNetwork agents={agents} tickSnapshot={currentSnapshot} />
+              <div className="eyebrow mb-3">Inspector</div>
+              <div style={{ width: 340 }}>
+                <SocietyInspector
+                  agents={agents}
+                  tickSnapshot={currentSnapshot}
+                  selectedAgentId={selectedAgentId}
+                  selectedShareIndex={selectedShareIndex}
+                />
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4">
-              <div className="eyebrow mb-3">Agent states</div>
-              <div className="flex flex-col gap-2">
-                {agents.map((agent) => {
-                  const color = ARCHETYPE_COLORS[agent.archetype] ?? "#ffffff";
-                  const tickState = currentSnapshot?.agent_states.find(
-                    (state) => state.agent_id === agent.id
-                  );
-                  const belief = tickState?.belief ?? agent.initial_belief;
-                  const delta = belief - agent.initial_belief;
-
-                  return (
-                    <div
-                      key={agent.id}
-                      className="rounded-[20px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
-                          style={{ background: color, boxShadow: `0 0 10px ${color}66` }}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium text-[var(--text-bright)]">
-                            {agent.name}
-                          </div>
-                          <div
-                            className="ui-mono truncate text-[11px] uppercase tracking-[0.16em]"
-                            style={{ color: `${color}cc` }}
-                          >
-                            {ARCHETYPE_LABELS[agent.archetype]}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 text-right">
-                          <span
-                            className="ui-mono text-base font-bold"
-                            style={{ color }}
-                          >
-                            {Math.round(belief * 100)}%
-                          </span>
-                          <span
-                            className="ui-mono text-[11px] font-semibold uppercase tracking-[0.12em]"
-                            style={{ color: delta >= 0 ? "var(--success)" : "var(--danger)" }}
-                          >
-                            {delta >= 0 ? "+" : ""}
-                            {Math.round(delta * 100)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="eyebrow mb-3">Belief convergence</div>
+              <div style={{ height: 220 }}>
+                <BeliefChart
+                  agents={agents}
+                  tickData={tickData}
+                  currentTick={currentTick}
+                  totalTicks={totalTicks}
+                  onTickSelect={handleTickSelect}
+                />
               </div>
             </div>
           </div>
