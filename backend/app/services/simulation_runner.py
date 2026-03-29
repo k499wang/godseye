@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Literal
@@ -37,6 +38,7 @@ CLAIM_RANKING_WEIGHT_NOVELTY: float = 0.3
 TRUST_SHARE_DELTA: float = 0.02
 TRUST_IGNORE_DELTA: float = -0.01
 FACTION_THRESHOLD: float = 0.08
+AGENT_LLM_TIMEOUT_SECONDS: float = float(os.getenv("SIM_AGENT_TIMEOUT_SECONDS", "8"))
 
 # ---------------------------------------------------------------------------
 # Data structures (swap to DB models / Pydantic schemas when Person 1 commits)
@@ -193,7 +195,10 @@ class SimulationRunner:
                     incoming_by_agent.get(agent.id, []),
                     market_question, tick_num,
                 )
-                action = await self._call_agent_llm(agent, sys_prompt, usr_prompt)
+                action = await asyncio.wait_for(
+                    self._call_agent_llm(agent, sys_prompt, usr_prompt),
+                    timeout=AGENT_LLM_TIMEOUT_SECONDS,
+                )
                 return agent, action
 
             results = await asyncio.gather(

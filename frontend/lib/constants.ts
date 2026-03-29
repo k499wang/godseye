@@ -7,7 +7,7 @@ export const CLAIM_RANKING_WEIGHT_NOVELTY = 0.3;
 export const TRUST_SHARE_DELTA = 0.02;
 export const TRUST_IGNORE_DELTA = -0.01;
 export const FACTION_THRESHOLD = 0.08;
-export const POLLING_INTERVAL_MS = 2000;
+export const POLLING_INTERVAL_MS = 1000;
 
 export const ARCHETYPE_LABELS: Record<string, string> = {
   bayesian_updater: "Bayesian Updater",

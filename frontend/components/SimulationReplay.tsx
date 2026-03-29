@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { SimulationResponse, TickSnapshot } from "@/lib/types";
 import { ARCHETYPE_COLORS, ARCHETYPE_LABELS } from "@/lib/constants";
 import { BeliefChart } from "./BeliefChart";
@@ -54,6 +54,7 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
   const agents = simulation.agents;
   const totalTicks = simulation.total_ticks;
   const loadedTicks = tickData.length;
+  const latestLoadedTick = loadedTicks > 0 ? tickData[loadedTicks - 1].tick : 1;
 
   const currentSnapshot: TickSnapshot | null =
     tickData.find((t) => t.tick === currentTick) ?? null;
@@ -65,6 +66,14 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
     },
     [tickData]
   );
+
+  useEffect(() => {
+    if (simulation.status === "running" || simulation.status === "building" || simulation.status === "pending") {
+      setCurrentTick(latestLoadedTick);
+    } else if (!tickData.find((tick) => tick.tick === currentTick)) {
+      setCurrentTick(latestLoadedTick);
+    }
+  }, [currentTick, latestLoadedTick, simulation.status, tickData]);
 
   const consensusAtTick = currentSnapshot
     ? currentSnapshot.agent_states.reduce((sum, state) => sum + state.belief, 0) /
