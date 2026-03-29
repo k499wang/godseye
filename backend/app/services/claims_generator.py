@@ -189,7 +189,6 @@ class ClaimsGeneratorService:
 
         if isinstance(payload, list):
             payload = {"claims": payload}
-
         try:
             envelope = GeneratedClaimsEnvelope.model_validate(payload)
         except ValidationError as exc:
