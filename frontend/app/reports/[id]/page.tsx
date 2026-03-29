@@ -271,21 +271,21 @@ export default function ReportPage({
               <div className="mt-6 flex flex-col gap-4 rounded-[24px] border border-[rgba(245,158,11,0.16)] bg-[rgba(245,158,11,0.05)] p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div>
-                    <div className="eyebrow mb-2 text-[var(--accent)]">Paper trading</div>
+                    <div className="eyebrow mb-2 text-[var(--accent)]">Trade</div>
                     <div className="text-xl font-semibold tracking-tight text-[var(--text-bright)]">
                       {paperTrading.position
-                        ? `You are paper long ${paperTrading.position.side.toUpperCase()}`
+                        ? `You are trdae long ${paperTrading.position.side.toUpperCase()}`
                         : "Bet this market after reading the simulation"}
                     </div>
                     <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-secondary)]">
-                      Save a mock position directly from the report and track it against the current market probability.
+                      Save a trdae position directly from the report and track it against the current market probability.
                     </p>
                   </div>
                   <button
                     onClick={() => setIsTradeDrawerOpen(true)}
                     className="ui-mono rounded-full border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.12)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)] transition hover:bg-[rgba(245,158,11,0.18)]"
                   >
-                    {paperTrading.position ? "Add to paper position" : "Paper trade this market"}
+                    {paperTrading.position ? "Add to trade position" : "Trade this market"}
                   </button>
                 </div>
 

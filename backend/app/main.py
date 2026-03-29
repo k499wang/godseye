@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import api_router
 from app.core.config import settings
+from app.core.database import ensure_schema_compatibility
 
 
 def create_app() -> FastAPI:
@@ -28,6 +29,10 @@ def create_app() -> FastAPI:
     @app.get("/", tags=["health"])
     async def root() -> dict[str, str]:
         return {"status": "ok", "service": settings.app_name}
+
+    @app.on_event("startup")
+    async def startup() -> None:
+        await ensure_schema_compatibility()
 
     app.include_router(api_router, prefix="/api")
     return app

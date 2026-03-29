@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -49,3 +50,17 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
 
 
 get_db = get_db_session
+
+
+async def ensure_schema_compatibility() -> None:
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                """
+                ALTER TABLE paper_trades
+                ADD COLUMN IF NOT EXISTS wallet_address VARCHAR(128),
+                ADD COLUMN IF NOT EXISTS signed_message TEXT,
+                ADD COLUMN IF NOT EXISTS wallet_signature TEXT
+                """
+            )
+        )

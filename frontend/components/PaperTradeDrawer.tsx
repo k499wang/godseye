@@ -84,14 +84,14 @@ export function PaperTradeDrawer({
     <div className="fixed inset-0 z-50 flex justify-end bg-[rgba(3,5,10,0.72)] backdrop-blur-sm">
       <button
         type="button"
-        aria-label="Close paper trading drawer"
+        aria-label="Close trade drawer"
         className="absolute inset-0 cursor-default"
         onClick={onClose}
       />
       <aside className="relative h-full w-full max-w-md overflow-y-auto border-l border-white/10 bg-[rgba(7,10,18,0.97)] p-6 shadow-2xl">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <div className="eyebrow mb-2 text-[var(--accent)]">Paper trade this market</div>
+            <div className="eyebrow mb-2 text-[var(--accent)]">Trae this market</div>
             <h2 className="text-2xl font-semibold tracking-tight text-[var(--text-bright)]">
               Put the report into a position
             </h2>
@@ -149,7 +149,7 @@ export function PaperTradeDrawer({
             </div>
             {existingSide && (
               <p className="mt-3 text-xs leading-5 text-[var(--text-muted)]">
-                This analysis context is locked to your existing {existingSide.toUpperCase()} paper position.
+                This analysis context is locked to your existing {existingSide.toUpperCase()} trae position.
               </p>
             )}
           </div>
@@ -163,7 +163,7 @@ export function PaperTradeDrawer({
               <div className="mt-2 text-sm text-[var(--text-secondary)]">
                 {connected && walletAddress
                   ? `Connected to ${wallet?.adapter.name ?? "wallet"}: ${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`
-                  : "Connect Phantom from the globe header before placing a paper trade."}
+                  : "Connect Phantom from the globe header before placing a trae."}
               </div>
               {connected && !walletSupportsSigning && (
                 <div className="mt-3 text-sm text-[var(--danger)]">
@@ -171,7 +171,7 @@ export function PaperTradeDrawer({
                 </div>
               )}
               <div className="mt-3 text-xs leading-5 text-[var(--text-muted)]">
-                Buying a paper position now requires a real Phantom message signature, but it still records only a mock trade in this app.
+                Buying a trade position now requires a real Phantom message signature, but it still records only a trae in this app.
               </div>
             </div>
           </div>
@@ -227,13 +227,13 @@ export function PaperTradeDrawer({
               onClick={async () => {
                 setError(null);
                 if (!connected || !walletAddress || !walletSupportsSigning || !signMessage) {
-                  setError("Connect Phantom and allow message signing before placing a paper order.");
+                  setError("Connect Phantom and allow message signing before placing a trae order.");
                   return;
                 }
 
                 try {
                   const signedMessage = [
-                    "GodSEye paper trade approval",
+                    "GodSEye trae approval",
                     `Market: ${marketId}`,
                     reportId ? `Report: ${reportId}` : null,
                     simulationId ? `Simulation: ${simulationId}` : null,

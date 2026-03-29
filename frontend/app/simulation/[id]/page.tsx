@@ -209,7 +209,7 @@ export default function SimulationPage({
               }
               className="ui-mono rounded-full border border-white/12 px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
             >
-              Paper trade
+              Trade
             </button>
             <button
               onClick={() =>
