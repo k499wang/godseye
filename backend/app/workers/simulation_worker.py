@@ -351,15 +351,27 @@ async def _persist_tick(
             share_key = (cs.from_agent_id, cs.to_agent_id, cs.claim_id, cs.tick)
             if share_key in existing_share_keys:
                 continue
-            db.add(ClaimShare(
-                simulation_id=UUID(simulation_id),
-                from_agent_id=UUID(cs.from_agent_id),
-                to_agent_id=UUID(cs.to_agent_id),
-                claim_id=UUID(cs.claim_id),
-                commentary=cs.commentary,
-                tick_number=cs.tick,
-                delivered=True,
-            ))
+            try:
+                db.add(ClaimShare(
+                    simulation_id=UUID(simulation_id),
+                    from_agent_id=UUID(cs.from_agent_id),
+                    to_agent_id=UUID(cs.to_agent_id),
+                    claim_id=UUID(cs.claim_id),
+                    commentary=cs.commentary,
+                    tick_number=cs.tick,
+                    delivered=True,
+                ))
+            except (ValueError, Exception) as share_err:
+                logger.warning(
+                    "Skipping invalid claim_share on tick %s: from=%s to=%s claim=%s error=%s",
+                    cs.tick, cs.from_agent_id, cs.to_agent_id, cs.claim_id, share_err,
+                )
+                await db.rollback()
+                # Re-fetch sim to reattach after rollback
+                sim = await db.get(Simulation, UUID(simulation_id))
+                if sim is None:
+                    return
+                continue
 
         await db.commit()
     except Exception as e:
