@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { SimulationResponse, TickSnapshot } from "@/lib/types";
 import { AgentConstellation } from "./AgentConstellation";
 import { ARCHETYPE_COLORS, ARCHETYPE_LABELS } from "@/lib/constants";
@@ -137,7 +137,7 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
 
   return (
     <div className="mx-auto max-w-[1680px] px-6 py-8 text-[var(--text-primary)] md:px-8 xl:px-10">
-      <div className="mb-5 rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)] px-5 py-4 shadow-[0_20px_60px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+      <div className="mb-5 rounded-xl border border-white/8 bg-[rgba(12,16,26,0.9)] px-5 py-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
             <span className="ui-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">
@@ -163,49 +163,45 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
         </div>
       </div>
 
-      <div className="mb-6 rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)] px-5 py-4 shadow-[0_16px_50px_rgba(0,0,0,0.24)] backdrop-blur-xl">
+      <div className="mb-6 rounded-xl border border-white/8 bg-[rgba(12,16,26,0.9)] px-5 py-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <button
-              className="rounded-full border border-[rgba(245,158,11,0.22)] bg-[rgba(245,158,11,0.08)] px-3 py-2 ui-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] transition hover:bg-[rgba(245,158,11,0.14)]"
+          <div className="flex items-center gap-1.5">
+            <CtrlBtn
               onClick={() => {
                 setPlayDirection(null);
-                const index = tickData.findIndex((snapshot) => snapshot.tick === currentTick);
+                const index = tickData.findIndex((s) => s.tick === currentTick);
                 if (index > 0) setCurrentTick(tickData[index - 1].tick);
               }}
             >
-              Prev
-            </button>
-            <button
-              className="rounded-full border border-[rgba(245,158,11,0.22)] bg-[rgba(245,158,11,0.08)] px-3 py-2 ui-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] transition hover:bg-[rgba(245,158,11,0.14)]"
+              ← Prev
+            </CtrlBtn>
+            <CtrlBtn
+              active={playDirection === "backward"}
               onClick={() => setPlayDirection((d) => (d === "backward" ? null : "backward"))}
-              title="Rewind"
             >
-              {playDirection === "backward" ? "\u275A\u275A" : "\u25C0"}
-            </button>
-            <div className="rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-4 py-2">
-              <span className="ui-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Tick </span>
-              <span className="ui-mono text-[16px] font-bold text-[var(--accent)]">
+              ◀ Rewind
+            </CtrlBtn>
+            <div className="mx-1 rounded-lg border border-white/10 bg-[rgba(255,255,255,0.03)] px-4 py-2 text-center">
+              <span className="ui-mono text-[10px] uppercase tracking-[0.14em] text-[var(--text-subtle)]">Tick </span>
+              <span className="ui-mono text-[15px] font-bold text-[var(--text-bright)]">
                 {String(currentTick).padStart(2, "0")}
               </span>
             </div>
-            <button
-              className="rounded-full border border-[rgba(245,158,11,0.22)] bg-[rgba(245,158,11,0.08)] px-3 py-2 ui-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] transition hover:bg-[rgba(245,158,11,0.14)]"
+            <CtrlBtn
+              active={playDirection === "forward"}
               onClick={() => setPlayDirection((d) => (d === "forward" ? null : "forward"))}
-              title="Play"
             >
-              {playDirection === "forward" ? "\u275A\u275A" : "\u25B6"}
-            </button>
-            <button
-              className="rounded-full border border-[rgba(245,158,11,0.22)] bg-[rgba(245,158,11,0.08)] px-3 py-2 ui-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] transition hover:bg-[rgba(245,158,11,0.14)]"
+              Play ▶
+            </CtrlBtn>
+            <CtrlBtn
               onClick={() => {
                 setPlayDirection(null);
-                const index = tickData.findIndex((snapshot) => snapshot.tick === currentTick);
+                const index = tickData.findIndex((s) => s.tick === currentTick);
                 if (index < tickData.length - 1) setCurrentTick(tickData[index + 1].tick);
               }}
             >
-              Next
-            </button>
+              Next →
+            </CtrlBtn>
           </div>
 
           <span className="ui-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-subtle)]">
@@ -219,10 +215,10 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
             className="absolute inset-y-0 left-0 rounded-full bg-[rgba(245,158,11,0.15)]"
             style={{ width: `${(loadedTicks / totalTicks) * 100}%` }}
           />
-          {/* Current playhead (gold) */}
+          {/* Current playhead */}
           <div
-            className="absolute inset-y-0 left-0 rounded-full bg-[linear-gradient(90deg,var(--accent),#fbbf24)] transition-[width] duration-300"
-            style={{ width: `${((currentTick) / totalTicks) * 100}%` }}
+            className="absolute inset-y-0 left-0 rounded-full bg-[rgba(255,255,255,0.55)] transition-[width] duration-300"
+            style={{ width: `${(currentTick / totalTicks) * 100}%` }}
           />
           {tickData.map((snapshot) => {
             const pct = ((snapshot.tick - 1) / Math.max(totalTicks - 1, 1)) * 100;
@@ -234,11 +230,10 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
                 className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 transition-all"
                 style={{
                   left: `${pct}%`,
-                  width: isActive ? 16 : 12,
-                  height: isActive ? 16 : 12,
-                  background: isActive ? "var(--accent)" : "rgba(255,255,255,0.92)",
-                  borderColor: isActive ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.22)",
-                  boxShadow: isActive ? "0 0 0 4px rgba(245,158,11,0.16)" : "none",
+                  width: isActive ? 14 : 10,
+                  height: isActive ? 14 : 10,
+                  background: isActive ? "#e2e8f0" : "rgba(255,255,255,0.35)",
+                  borderColor: isActive ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.15)",
                 }}
                 onClick={() => handleTickSelect(snapshot.tick)}
                 title={`Tick ${snapshot.tick}`}
@@ -261,7 +256,7 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
       />
 
       {selectedAgent && selectedAgentState && (
-        <div className="mt-6 rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)] px-5 py-4 shadow-[0_14px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl">
+        <div className="mt-4 rounded-xl border border-white/8 bg-[rgba(12,16,26,0.9)] px-5 py-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <span
@@ -303,6 +298,30 @@ function MetricInline({ label, value, color }: { label: string; value: string; c
         {value}
       </span>
     </div>
+  );
+}
+
+function CtrlBtn({
+  children,
+  onClick,
+  active,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  active?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="ui-mono rounded-lg border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] transition"
+      style={{
+        borderColor: active ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.1)",
+        background: active ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)",
+        color: active ? "var(--text-bright)" : "var(--text-secondary)",
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
