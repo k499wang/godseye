@@ -125,6 +125,11 @@ export interface MarketBrowseItem {
   lat: number;
   lng: number;
   region: string;
+  is_imported: boolean;
+  market_id: string | null;
+  session_id: string | null;
+  simulation_id: string | null;
+  simulation_status: SimulationStatus | null;
 }
 
 export interface MarketBrowseResponse {
