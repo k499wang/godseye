@@ -109,6 +109,12 @@ async def start_simulation(
             detail={"detail": "Simulation not found", "code": "SIMULATION_NOT_FOUND"},
         )
 
+    # Starting a simulation should be idempotent from the client's perspective.
+    # If the sim is already active or finished, return its current state instead
+    # of queueing duplicate workers.
+    if simulation.status in {"running", "complete"}:
+        return _to_simulation_response(simulation)
+
     simulation.status = "running"
     await db.commit()
 
