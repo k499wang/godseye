@@ -28,16 +28,17 @@ export async function generateClaims(marketId: string): Promise<ClaimsGenerateRe
   return res.data;
 }
 
-export async function buildWorld(sessionId: string): Promise<SimulationResponse> {
-  const res = await client.post<SimulationResponse>("/api/simulations/build-world", {
-    session_id: sessionId,
-  });
+export async function buildWorld(sessionId: string, demo = false): Promise<SimulationResponse> {
+  const res = await client.post<SimulationResponse>(
+    `/api/simulations/build-world${demo ? "?demo=true" : ""}`,
+    { session_id: sessionId },
+  );
   return res.data;
 }
 
-export async function startSimulation(simulationId: string): Promise<SimulationResponse> {
+export async function startSimulation(simulationId: string, demo = false): Promise<SimulationResponse> {
   const res = await client.post<SimulationResponse>(
-    `/api/simulations/${simulationId}/start`
+    `/api/simulations/${simulationId}/start${demo ? "?demo=true" : ""}`
   );
   return res.data;
 }

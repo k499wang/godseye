@@ -15,7 +15,7 @@ export default function SimulationPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ event?: string }>;
+  searchParams: Promise<{ event?: string; demo?: string }>;
 }) {
   const { id } = use(params);
   const resolvedSearchParams = use(searchParams);
@@ -23,6 +23,7 @@ export default function SimulationPage({
   const isMock = id === "mock";
   const selectedEventId =
     typeof resolvedSearchParams.event === "string" ? resolvedSearchParams.event : null;
+  const demo = resolvedSearchParams.demo === "true";
   const backHref = selectedEventId
     ? `/?mode=explore&event=${encodeURIComponent(selectedEventId)}`
     : "/?mode=explore";
@@ -49,13 +50,13 @@ export default function SimulationPage({
     if (isAutoStarting) return;
 
     setIsAutoStarting(true);
-    startSimulation(simulation.id)
+    startSimulation(simulation.id, demo)
       .catch(() => undefined)
       .finally(() => {
         setIsAutoStarting(false);
         void refetch();
       });
-  }, [isAutoStarting, isMock, refetch, simulation]);
+  }, [demo, isAutoStarting, isMock, refetch, simulation]);
 
   const showLoadingState =
     !isMock &&
