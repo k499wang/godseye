@@ -9,6 +9,7 @@ import { TimelineSlider } from "@/components/TimelineSlider";
 import { EventPanel } from "@/components/EventPanel";
 import { GlobeSearch } from "@/components/GlobeSearch";
 import { GodseyeLogo } from "@/components/GodseyeLogo";
+import { WalletButton } from "@/components/WalletButton";
 import { CATEGORY_COLOR } from "@/lib/globeData";
 import type { GlobeEvent } from "@/lib/globeData";
 
@@ -337,6 +338,7 @@ export function GlobeHomePage({
               }}
             >
               <GlobeSearch onSelect={handleSearchSelect} />
+              <WalletButton />
               {inExplore && (
                 <div
                   style={{
