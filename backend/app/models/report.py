@@ -11,6 +11,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.paper_position import PaperPosition
+    from app.models.paper_trade import PaperTrade
     from app.models.simulation import Simulation
 
 
@@ -49,3 +51,5 @@ class Report(Base):
     )
 
     simulation: Mapped["Simulation"] = relationship(back_populates="report")
+    paper_positions: Mapped[list["PaperPosition"]] = relationship()
+    paper_trades: Mapped[list["PaperTrade"]] = relationship()

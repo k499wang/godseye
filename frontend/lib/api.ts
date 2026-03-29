@@ -5,6 +5,8 @@ import type {
   SimulationResponse,
   ReportResponse,
   MarketBrowseResponse,
+  PaperTradingResponse,
+  PlacePaperOrderRequest,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5001";
@@ -47,6 +49,18 @@ export async function getSimulation(simulationId: string): Promise<SimulationRes
 
 export async function getReport(simulationId: string): Promise<ReportResponse> {
   const res = await client.get<ReportResponse>(`/api/reports/${simulationId}`);
+  return res.data;
+}
+
+export async function getPaperTrading(reportId: string): Promise<PaperTradingResponse> {
+  const res = await client.get<PaperTradingResponse>(`/api/paper-trading/reports/${reportId}`);
+  return res.data;
+}
+
+export async function placePaperOrder(
+  payload: PlacePaperOrderRequest
+): Promise<PaperTradingResponse> {
+  const res = await client.post<PaperTradingResponse>("/api/paper-trading/orders", payload);
   return res.data;
 }
 

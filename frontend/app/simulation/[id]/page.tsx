@@ -136,18 +136,32 @@ export default function SimulationPage({
         )}
 
         {reportReady && (
-          <button
-            onClick={() =>
-              router.push(
-                selectedEventId
-                  ? `/reports/${simulation.id}?event=${encodeURIComponent(selectedEventId)}`
-                  : `/reports/${simulation.id}`
-              )
-            }
-            className="ui-mono rounded-full border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.08)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)] transition hover:bg-[rgba(245,158,11,0.14)]"
-          >
-            View report
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() =>
+                router.push(
+                  selectedEventId
+                    ? `/reports/${simulation.id}?event=${encodeURIComponent(selectedEventId)}&trade=1`
+                    : `/reports/${simulation.id}?trade=1`
+                )
+              }
+              className="ui-mono rounded-full border border-white/12 px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            >
+              Paper trade
+            </button>
+            <button
+              onClick={() =>
+                router.push(
+                  selectedEventId
+                    ? `/reports/${simulation.id}?event=${encodeURIComponent(selectedEventId)}`
+                    : `/reports/${simulation.id}`
+                )
+              }
+              className="ui-mono rounded-full border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.08)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)] transition hover:bg-[rgba(245,158,11,0.14)]"
+            >
+              View report
+            </button>
+          </div>
         )}
       </nav>
 

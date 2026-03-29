@@ -104,6 +104,7 @@ export interface SimulationResponse {
 export interface ReportResponse {
   id: string;
   simulation_id: string;
+  market_id: string;
   market_probability: number;
   simulation_probability: number;
   summary: string;
@@ -141,4 +142,44 @@ export interface MarketBrowseResponse {
 export interface ApiError {
   detail: string;
   code: string | null;
+}
+
+export interface PlacePaperOrderRequest {
+  market_id: string;
+  simulation_id?: string | null;
+  report_id?: string | null;
+  side: "yes" | "no";
+  amount: number;
+}
+
+export interface PaperTrade {
+  id: string;
+  side: "yes" | "no";
+  price: number;
+  shares: number;
+  amount: number;
+  created_at: string;
+}
+
+export interface PaperPositionSummary {
+  id: string;
+  market_id: string;
+  simulation_id: string | null;
+  report_id: string | null;
+  side: "yes" | "no";
+  avg_entry_price: number;
+  shares: number;
+  total_cost: number;
+  current_price: number;
+  market_probability: number;
+  current_value: number;
+  unrealized_pnl: number;
+  unrealized_pnl_pct: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaperTradingResponse {
+  position: PaperPositionSummary | null;
+  trades: PaperTrade[];
 }

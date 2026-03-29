@@ -13,6 +13,8 @@ create extension if not exists pgcrypto;
 
 drop function if exists public.set_updated_at();
 
+drop table if exists public.paper_trades cascade;
+drop table if exists public.paper_positions cascade;
 drop table if exists public.reports cascade;
 drop table if exists public.claim_shares cascade;
 drop table if exists public.agents cascade;
@@ -22,10 +24,12 @@ drop table if exists public.analysis_sessions cascade;
 drop table if exists public.markets cascade;
 
 drop type if exists public.claim_stance cascade;
+drop type if exists public.paper_side cascade;
 drop type if exists public.simulation_status cascade;
 drop type if exists public.agent_archetype cascade;
 
 create type public.claim_stance as enum ('yes', 'no');
+create type public.paper_side as enum ('yes', 'no');
 
 create type public.simulation_status as enum (
   'pending',
@@ -164,6 +168,37 @@ create table public.reports (
 comment on table public.reports is 'Final generated report for a completed simulation.';
 comment on column public.reports.key_drivers is 'JSON array of strings.';
 
+create table public.paper_positions (
+  id uuid primary key default gen_random_uuid(),
+  market_id uuid not null references public.markets(id) on delete cascade,
+  simulation_id uuid null references public.simulations(id) on delete cascade,
+  report_id uuid null references public.reports(id) on delete cascade,
+  side public.paper_side not null,
+  avg_entry_price numeric(6, 5) not null check (avg_entry_price > 0 and avg_entry_price < 1),
+  shares numeric(14, 5) not null check (shares > 0),
+  total_cost numeric(14, 2) not null check (total_cost > 0),
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  unique (market_id, simulation_id, report_id)
+);
+
+comment on table public.paper_positions is 'Aggregated paper-trading position for a market within a given simulation/report context.';
+
+create table public.paper_trades (
+  id uuid primary key default gen_random_uuid(),
+  position_id uuid not null references public.paper_positions(id) on delete cascade,
+  market_id uuid not null references public.markets(id) on delete cascade,
+  simulation_id uuid null references public.simulations(id) on delete cascade,
+  report_id uuid null references public.reports(id) on delete cascade,
+  side public.paper_side not null,
+  price numeric(6, 5) not null check (price > 0 and price < 1),
+  shares numeric(14, 5) not null check (shares > 0),
+  amount numeric(14, 2) not null check (amount > 0),
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+comment on table public.paper_trades is 'Individual paper orders placed from report/simulation contexts.';
+
 create index idx_analysis_sessions_market_id on public.analysis_sessions (market_id);
 
 create index idx_claims_session_id on public.claims (session_id);
@@ -183,6 +218,15 @@ create index idx_claim_shares_to_agent_id on public.claim_shares (to_agent_id);
 create index idx_claim_shares_from_agent_id on public.claim_shares (from_agent_id);
 create index idx_claim_shares_claim_id on public.claim_shares (claim_id);
 create index idx_claim_shares_tick_delivered on public.claim_shares (simulation_id, tick_number, delivered);
+
+create index idx_paper_positions_market_id on public.paper_positions (market_id);
+create index idx_paper_positions_report_id on public.paper_positions (report_id);
+create index idx_paper_positions_simulation_id on public.paper_positions (simulation_id);
+
+create index idx_paper_trades_position_id on public.paper_trades (position_id);
+create index idx_paper_trades_market_id on public.paper_trades (market_id);
+create index idx_paper_trades_report_id on public.paper_trades (report_id);
+create index idx_paper_trades_simulation_id on public.paper_trades (simulation_id);
 
 create trigger set_markets_updated_at
 before update on public.markets
@@ -219,6 +263,11 @@ before update on public.reports
 for each row
 execute function public.set_updated_at();
 
+create trigger set_paper_positions_updated_at
+before update on public.paper_positions
+for each row
+execute function public.set_updated_at();
+
 -- Optional future RLS:
 -- alter table public.markets enable row level security;
 -- alter table public.analysis_sessions enable row level security;
@@ -226,4 +275,6 @@ execute function public.set_updated_at();
 -- alter table public.simulations enable row level security;
 -- alter table public.agents enable row level security;
 -- alter table public.claim_shares enable row level security;
+-- alter table public.paper_positions enable row level security;
+-- alter table public.paper_trades enable row level security;
 -- alter table public.reports enable row level security;
