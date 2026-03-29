@@ -2,7 +2,7 @@
 
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useGlobe } from "./GlobeContext";
 import { CATEGORY_COLOR } from "@/lib/globeData";
 import { buildWorld, generateClaims, importMarket } from "@/lib/api";
@@ -17,6 +17,8 @@ export function EventPanel() {
     refreshEvents,
   } = useGlobe();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const demo = searchParams.get("demo") === "true";
   const [isActionPending, setIsActionPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -78,9 +80,10 @@ export function EventPanel() {
       }
 
       await generateClaims(marketId);
-      const builtSimulation = await buildWorld(sessionId);
+      const builtSimulation = await buildWorld(sessionId, demo);
       stopAutoSpin();
-      router.push(`/simulation/${builtSimulation.id}?event=${encodeURIComponent(event.id)}`);
+      const demoParam = demo ? "&demo=true" : "";
+      router.push(`/simulation/${builtSimulation.id}?event=${encodeURIComponent(event.id)}${demoParam}`);
       void refreshEvents();
     } catch (error) {
       if (axios.isAxiosError(error)) {
