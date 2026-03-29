@@ -107,7 +107,7 @@ export default function SimulationPage({
 
   return (
     <div className="min-h-screen bg-[var(--bg-base)]">
-      <nav className="sticky top-0 z-20 flex items-center justify-between border-b border-white/8 bg-[rgba(5,7,13,0.88)] px-5 py-3 backdrop-blur-xl">
+      <nav className="sticky top-0 z-20 flex items-center justify-between border-b border-white/6 bg-[rgba(5,7,13,0.84)] px-6 py-4 backdrop-blur-xl">
         <div className="flex items-center gap-4">
           <button
             onClick={() => router.push(backHref)}
@@ -222,29 +222,29 @@ function SimulationLoadState({
           : "Generating first tick";
 
   return (
-    <div className="w-full max-w-[72rem] rounded-[20px] border border-white/8 bg-[rgba(10,14,22,0.94)] shadow-[0_14px_44px_rgba(0,0,0,0.22)]">
-      <div className="grid min-h-[500px] grid-cols-[1.2fr_0.9fr]">
-        <div className="flex flex-col justify-between border-r border-white/8 p-6">
+    <div className="w-full max-w-[74rem] rounded-[26px] border border-white/6 bg-[rgba(10,14,22,0.92)] shadow-[0_16px_44px_rgba(0,0,0,0.16)]">
+      <div className="grid min-h-[560px] grid-cols-[1.25fr_0.95fr]">
+        <div className="flex flex-col justify-between border-r border-white/6 p-8">
           <div>
-            <div className="mb-4 flex items-center gap-3">
+            <div className="mb-6 flex items-center gap-3">
               <GodseyeLogo size="sm" />
               <div className="ui-mono rounded-full border border-[rgba(245,158,11,0.2)] bg-[rgba(245,158,11,0.06)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
                 {statusLabel}
               </div>
             </div>
 
-            <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
+            <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
               Simulation boot sequence
             </div>
-            <h1 className="max-w-2xl text-[1.7rem] font-semibold tracking-[-0.04em] text-[var(--text-bright)]">
+            <h1 className="max-w-2xl text-[2rem] font-semibold tracking-[-0.04em] text-[var(--text-bright)]">
               Bringing the simulation online tick by tick.
             </h1>
-            <p className="mt-2 max-w-2xl text-[13px] leading-5 text-[var(--text-secondary)]">
+            <p className="mt-3 max-w-2xl text-[14px] leading-6 text-[var(--text-secondary)]">
               The model is loading the existing run, assembling the agent network, and generating the opening interactions before the replay becomes interactive.
             </p>
           </div>
 
-          <div className="mt-6">
+          <div className="mt-10">
             <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
               <span>Progress</span>
               <span className="ui-mono text-[var(--text-bright)]">{Math.round(progress)}%</span>
@@ -258,8 +258,8 @@ function SimulationLoadState({
           </div>
         </div>
 
-        <div className="flex flex-col justify-between p-6">
-          <div className="space-y-2.5">
+        <div className="flex flex-col justify-between p-8">
+          <div className="space-y-3.5">
             {steps.map((step, index) => {
               const state =
                 index < currentStepIndex
@@ -271,7 +271,7 @@ function SimulationLoadState({
               return (
                 <div
                   key={step.label}
-                  className="rounded-[14px] border px-3.5 py-2.5 transition-all duration-500"
+                  className="rounded-[18px] border px-4 py-3 transition-all duration-500"
                   style={{
                     borderColor:
                       state === "done"
@@ -328,7 +328,7 @@ function SimulationLoadState({
             })}
           </div>
 
-          <div className="mt-4 rounded-[14px] border border-white/8 bg-[rgba(255,255,255,0.02)] p-3.5">
+          <div className="mt-6 rounded-[18px] border border-white/6 bg-[rgba(255,255,255,0.018)] p-4">
             <div className="ui-mono mb-2 text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
               Live context
             </div>

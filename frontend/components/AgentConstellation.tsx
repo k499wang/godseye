@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import * as d3 from "d3";
 import type { AgentSummary, TickSnapshot } from "@/lib/types";
 import { ARCHETYPE_COLORS, ARCHETYPE_LABELS } from "@/lib/constants";
 
@@ -12,34 +13,36 @@ interface AgentConstellationProps {
   onSelectAgent: (agentId: string) => void;
 }
 
-type Point = { x: number; y: number };
-type Edge = { from: string; to: string; trust: number };
-type AgentStateView = {
+type GraphNode = d3.SimulationNodeDatum & {
+  id: string;
+  name: string;
+  archetype: string;
   belief: number;
-  previousBelief: number;
   confidence: number;
-  action: string;
-  reasoning: string;
+  delta: number;
+  radius: number;
+  isSelected: boolean;
+  isActive: boolean;
+  targetX: number;
+  targetY: number;
 };
 
-const SCENE_W = 920;
-const SCENE_H = 1040;
-const X_PAD = 220;
-const Y_PAD = 190;
+type GraphLink = d3.SimulationLinkDatum<GraphNode> & {
+  id: string;
+  kind: "trust" | "share" | "ambient";
+  strength: number;
+  label: string;
+  isHighlighted: boolean;
+  color: string;
+  secondaryColor?: string;
+};
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
+const SCENE_W = 1420;
+const SCENE_H = 940;
+const TICK_MOTION_MS = 650;
 
 function shortName(name: string): string {
   return name.split(" ")[0] ?? name;
-}
-
-function summarize(text: string): string {
-  const compact = text.replace(/\s+/g, " ").trim();
-  if (!compact) return "No current commentary";
-  const first = compact.split(/[.!?]/)[0]?.trim() || compact;
-  return first.length > 78 ? `${first.slice(0, 75)}...` : first;
 }
 
 function hash(value: string): number {
@@ -50,18 +53,68 @@ function hash(value: string): number {
   return acc;
 }
 
-function edgeStyle(from: Point, to: Point) {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const length = Math.sqrt(dx * dx + dy * dy);
-  const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+function seededUnit(seed: string): number {
+  return (hash(seed) % 1000) / 1000;
+}
+
+function clip(text: string, limit: number): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return normalized.length > limit ? `${normalized.slice(0, limit - 3)}...` : normalized;
+}
+
+function resolveNode(endpoint: string | number | GraphNode): GraphNode | null {
+  return typeof endpoint === "object" ? endpoint : null;
+}
+
+function curveMetrics(link: GraphLink): {
+  path: string;
+  source: GraphNode;
+  target: GraphNode;
+  cx: number;
+  cy: number;
+  length: number;
+} | null {
+  const source = resolveNode(link.source);
+  const target = resolveNode(link.target);
+  if (!source || !target) return null;
+
+  const dx = (target.x ?? 0) - (source.x ?? 0);
+  const dy = (target.y ?? 0) - (source.y ?? 0);
+  const length = Math.sqrt(dx * dx + dy * dy) || 1;
+  const curvature = link.kind === "share" ? Math.min(72, length * 0.18) : Math.min(34, length * 0.1);
+  const mx = ((source.x ?? 0) + (target.x ?? 0)) / 2;
+  const my = ((source.y ?? 0) + (target.y ?? 0)) / 2;
+  const cx = mx - (dy / length) * curvature;
+  const cy = my + (dx / length) * curvature;
+
   return {
-    left: from.x,
-    top: from.y,
-    width: length,
-    transform: `rotate(${angle}deg)`,
-    transformOrigin: "0 50%",
+    path: `M ${source.x ?? 0} ${source.y ?? 0} Q ${cx} ${cy} ${target.x ?? 0} ${target.y ?? 0}`,
+    source,
+    target,
+    cx,
+    cy,
+    length,
   };
+}
+
+function labelPosition(link: GraphLink): { x: number; y: number } | null {
+  const metrics = curveMetrics(link);
+  if (!metrics) return null;
+
+  return {
+    x: 0.25 * (metrics.source.x ?? 0) + 0.5 * metrics.cx + 0.25 * (metrics.target.x ?? 0),
+    y: 0.25 * (metrics.source.y ?? 0) + 0.5 * metrics.cy + 0.25 * (metrics.target.y ?? 0),
+  };
+}
+
+function beliefTone(value: number): string {
+  if (value >= 0.65) return "#34d399";
+  if (value >= 0.5) return "#f59e0b";
+  return "#fb7185";
+}
+
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
 export function AgentConstellation({
@@ -71,6 +124,23 @@ export function AgentConstellation({
   selectedAgentId,
   onSelectAgent,
 }: AgentConstellationProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(1240);
+  const animationFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (width) setContainerWidth(width);
+    });
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   const snapshots = useMemo(
     () => tickData.filter((snapshot) => snapshot.tick <= currentTick),
     [currentTick, tickData]
@@ -80,265 +150,586 @@ export function AgentConstellation({
   const previousSnapshot = snapshots[snapshots.length - 2] ?? null;
 
   const stateById = useMemo(() => {
-    const currentMap = new Map(
+    const currentStates = new Map(
       (currentSnapshot?.agent_states ?? []).map((state) => [state.agent_id, state])
     );
-    const previousMap = new Map(
+    const previousStates = new Map(
       (previousSnapshot?.agent_states ?? []).map((state) => [state.agent_id, state])
     );
 
-    return new Map<string, AgentStateView>(
+    return new Map(
       agents.map((agent) => {
-        const current = currentMap.get(agent.id);
-        const previous = previousMap.get(agent.id);
+        const currentState = currentStates.get(agent.id);
+        const previousState = previousStates.get(agent.id);
+        const belief = currentState?.belief ?? agent.current_belief ?? agent.initial_belief;
+        const previousBelief = previousState?.belief ?? agent.initial_belief;
         return [
           agent.id,
           {
-            belief: current?.belief ?? agent.current_belief ?? agent.initial_belief,
-            previousBelief: previous?.belief ?? agent.initial_belief,
-            confidence: current?.confidence ?? agent.confidence,
-            action: current?.action_taken ?? "update_belief",
-            reasoning: current?.reasoning ?? "",
+            belief,
+            confidence: currentState?.confidence ?? agent.confidence,
+            delta: belief - previousBelief,
+            isSharing: currentState?.action_taken === "share_claim",
           },
         ];
       })
     );
   }, [agents, currentSnapshot, previousSnapshot]);
 
-  const points = useMemo(() => {
-    const map = new Map<string, Point>();
-    for (const agent of agents) {
-      const state = stateById.get(agent.id);
-      if (!state) continue;
-      const salt = hash(agent.id);
-      const xJitter = ((salt % 17) - 8) * 1.5;
-      const yJitter = ((Math.floor(salt / 17) % 19) - 9) * 2;
-      const x = X_PAD + state.belief * (SCENE_W - X_PAD * 2) + xJitter;
-      const y = Y_PAD + (1 - state.confidence) * (SCENE_H - Y_PAD * 2) + yJitter;
-      map.set(agent.id, {
-        x: clamp(x, 120, SCENE_W - 120),
-        y: clamp(y, 120, SCENE_H - 120),
-      });
-    }
-    return map;
-  }, [agents, stateById]);
+  const activeShares = currentSnapshot?.claim_shares ?? [];
 
-  const edges = useMemo(() => {
-    const edgeMap = new Map<string, Edge>();
+  const layout = useMemo(() => {
+    const nodes: GraphNode[] = agents.map((agent) => {
+      const state = stateById.get(agent.id);
+      const belief = state?.belief ?? agent.initial_belief;
+      const confidence = state?.confidence ?? agent.confidence;
+      const orbit = 180 + belief * 240 + seededUnit(`${agent.id}-orbit`) * 120;
+      const angle = seededUnit(`${agent.id}-angle`) * Math.PI * 2;
+      const drift = (confidence - 0.5) * 220;
+      const targetX = SCENE_W / 2 + Math.cos(angle) * orbit + (belief - 0.5) * 260;
+      const targetY = SCENE_H / 2 + Math.sin(angle) * (orbit * 0.48) - drift;
+      return {
+        id: agent.id,
+        name: agent.name,
+        archetype: agent.archetype,
+        belief,
+        confidence,
+        delta: state?.delta ?? 0,
+        radius: selectedAgentId === agent.id ? 14 : state?.isSharing ? 11 : 9,
+        isSelected: selectedAgentId === agent.id,
+        isActive:
+          state?.isSharing === true ||
+          activeShares.some((share) => share.from_agent_id === agent.id || share.to_agent_id === agent.id),
+        targetX,
+        targetY,
+        x: targetX,
+        y: targetY,
+      };
+    });
+
+    const trustMap = new Map<string, GraphLink>();
     for (const snapshot of snapshots) {
       for (const update of snapshot.trust_updates) {
-        edgeMap.set(`${update.from_agent_id}:${update.to_agent_id}`, {
-          from: update.from_agent_id,
-          to: update.to_agent_id,
-          trust: clamp(update.new_trust, 0.08, 0.95),
+        const sourceAgent = agents.find((agent) => agent.id === update.from_agent_id);
+        trustMap.set(`${update.from_agent_id}:${update.to_agent_id}`, {
+          id: `trust-${update.from_agent_id}-${update.to_agent_id}`,
+          source: update.from_agent_id,
+          target: update.to_agent_id,
+          kind: "trust",
+          strength: Math.max(0.12, Math.min(update.new_trust, 0.95)),
+          label: `${Math.round(update.new_trust * 100)} trust`,
+          isHighlighted:
+            selectedAgentId === update.from_agent_id || selectedAgentId === update.to_agent_id,
+          color: sourceAgent ? ARCHETYPE_COLORS[sourceAgent.archetype] : "#94a3b8",
         });
       }
     }
-    return [...edgeMap.values()].sort((a, b) => b.trust - a.trust).slice(0, 20);
-  }, [snapshots]);
 
-  const selectedAgent =
-    agents.find((agent) => agent.id === selectedAgentId) ?? agents[0] ?? null;
-  const selectedState = selectedAgent ? stateById.get(selectedAgent.id) : null;
+    const shareLinks: GraphLink[] = activeShares.map((share, index) => {
+      const sourceAgent = agents.find((agent) => agent.id === share.from_agent_id);
+      const targetAgent = agents.find((agent) => agent.id === share.to_agent_id);
+      return {
+        id: `share-${share.from_agent_id}-${share.to_agent_id}-${index}`,
+        source: share.from_agent_id,
+        target: share.to_agent_id,
+        kind: "share",
+        strength: 1,
+        label: clip(share.claim_text, 42),
+        isHighlighted:
+          selectedAgentId === share.from_agent_id || selectedAgentId === share.to_agent_id,
+        color: sourceAgent ? ARCHETYPE_COLORS[sourceAgent.archetype] : "#1d4ed8",
+        secondaryColor: targetAgent ? ARCHETYPE_COLORS[targetAgent.archetype] : "#0f172a",
+      };
+    });
+
+    const links: GraphLink[] = [...trustMap.values(), ...shareLinks];
+
+    if (links.length < Math.max(agents.length, 8)) {
+      const ambientLinks = new Map<string, GraphLink>();
+      for (const source of nodes) {
+        const neighbors = nodes
+          .filter((target) => target.id !== source.id)
+          .map((target) => {
+            const beliefGap = Math.abs(source.belief - target.belief);
+            const confidenceGap = Math.abs(source.confidence - target.confidence);
+            return {
+              target,
+              score: beliefGap * 0.7 + confidenceGap * 0.3,
+            };
+          })
+          .sort((a, b) => a.score - b.score)
+          .slice(0, 2);
+
+        for (const neighbor of neighbors) {
+          const pair = [source.id, neighbor.target.id].sort().join(":");
+          if (ambientLinks.has(pair)) continue;
+          ambientLinks.set(pair, {
+            id: `ambient-${pair}`,
+            source: source.id,
+            target: neighbor.target.id,
+            kind: "ambient",
+            strength: Math.max(0.35, 1 - neighbor.score),
+            label: "",
+            isHighlighted: selectedAgentId === source.id || selectedAgentId === neighbor.target.id,
+            color: "rgba(148,163,184,0.92)",
+          });
+        }
+      }
+      links.push(...ambientLinks.values());
+    }
+
+    const simulation = d3
+      .forceSimulation(nodes)
+      .force(
+        "link",
+        d3
+          .forceLink<GraphNode, GraphLink>(links)
+          .id((node) => node.id)
+          .distance((link) => (link.kind === "share" ? 118 : link.kind === "ambient" ? 154 : 176))
+          .strength((link) => (link.kind === "share" ? 0.64 : link.kind === "ambient" ? 0.2 : 0.18 + link.strength * 0.22))
+      )
+      .force("charge", d3.forceManyBody().strength(-420))
+      .force("center", d3.forceCenter(SCENE_W / 2, SCENE_H / 2))
+      .force("collision", d3.forceCollide<GraphNode>().radius((node) => node.radius + 62))
+      .force("x", d3.forceX<GraphNode>((node) => node.targetX).strength(0.14))
+      .force("y", d3.forceY<GraphNode>((node) => node.targetY).strength(0.14))
+      .force("radial", d3.forceRadial(260, SCENE_W / 2, SCENE_H / 2).strength(0.02))
+      .stop();
+
+    for (let index = 0; index < 320; index += 1) simulation.tick();
+
+    return { nodes, links };
+  }, [activeShares, agents, selectedAgentId, snapshots, stateById]);
+
+  const [animatedNodes, setAnimatedNodes] = useState<GraphNode[]>(layout.nodes);
+
+  useEffect(() => {
+    setAnimatedNodes((previousNodes) => {
+      if (previousNodes.length === 0) return layout.nodes;
+
+      const previousById = new Map(previousNodes.map((node) => [node.id, node]));
+      return layout.nodes.map((node) => {
+        const previous = previousById.get(node.id);
+        return previous
+          ? {
+              ...node,
+              x: previous.x ?? node.x,
+              y: previous.y ?? node.y,
+            }
+          : node;
+      });
+    });
+  }, [layout.nodes]);
+
+  useEffect(() => {
+    if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
+
+    const previousById = new Map(animatedNodes.map((node) => [node.id, node]));
+    const targets = layout.nodes.map((node) => {
+      const previous = previousById.get(node.id);
+      return {
+        id: node.id,
+        fromX: previous?.x ?? node.x ?? node.targetX,
+        fromY: previous?.y ?? node.y ?? node.targetY,
+        toX: node.x ?? node.targetX,
+        toY: node.y ?? node.targetY,
+      };
+    });
+
+    const start = performance.now();
+
+    const animate = (now: number) => {
+      const progress = Math.min(1, (now - start) / TICK_MOTION_MS);
+      const eased = easeInOutCubic(progress);
+
+      setAnimatedNodes(
+        layout.nodes.map((node) => {
+          const target = targets.find((entry) => entry.id === node.id);
+          if (!target) return node;
+          return {
+            ...node,
+            x: target.fromX + (target.toX - target.fromX) * eased,
+            y: target.fromY + (target.toY - target.fromY) * eased,
+          };
+        })
+      );
+
+      if (progress < 1) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+      } else {
+        animationFrameRef.current = null;
+      }
+    };
+
+    animationFrameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, [layout.nodes]);
+
+  const renderedLinks = useMemo(
+    () =>
+      layout.links.map((link) => {
+        const sourceId =
+          typeof link.source === "object" ? link.source.id : String(link.source);
+        const targetId =
+          typeof link.target === "object" ? link.target.id : String(link.target);
+        return {
+          ...link,
+          source: animatedNodes.find((node) => node.id === sourceId) ?? link.source,
+          target: animatedNodes.find((node) => node.id === targetId) ?? link.target,
+        };
+      }),
+    [animatedNodes, layout.links]
+  );
+
+  const selectedNode =
+    animatedNodes.find((node) => node.id === selectedAgentId) ?? animatedNodes[0] ?? null;
+  const renderedHeight = Math.max(680, containerWidth * (SCENE_H / SCENE_W));
 
   if (!agents.length) {
     return (
-      <div className="flex min-h-[560px] items-center justify-center rounded-[30px] border border-white/10 bg-[rgba(255,255,255,0.03)]">
-        <div className="eyebrow text-[var(--text-muted)]">No agents loaded</div>
+      <div className="flex min-h-[520px] items-center justify-center rounded-[28px] border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)]">
+        <div className="ui-mono text-[11px] uppercase tracking-[0.18em] text-[var(--text-subtle)]">
+          No agents loaded
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="rounded-[22px] border border-white/6 bg-[linear-gradient(180deg,rgba(13,17,26,0.9),rgba(8,11,18,0.96))] p-3 shadow-[0_14px_44px_rgba(0,0,0,0.18)]">
-      <div className="mb-1.5 flex items-start justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="eyebrow text-[var(--accent)]">Agent constellation</span>
-          <span className="ui-mono rounded-full border border-white/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-            Belief X
-          </span>
-          <span className="ui-mono rounded-full border border-white/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-            Confidence Y
-          </span>
-          <span className="ui-mono rounded-full border border-white/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-            Trust links
-          </span>
-        </div>
-        {selectedAgent && selectedState && (
-          <div className="w-[300px] rounded-[12px] border border-white/8 bg-[rgba(255,255,255,0.02)] px-2.5 py-1.5">
-            <div className="flex items-center gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold text-[var(--text-bright)]">{selectedAgent.name}</div>
-              </div>
-              <div
-                className="ui-mono text-[10px] uppercase tracking-[0.14em]"
-                style={{ color: ARCHETYPE_COLORS[selectedAgent.archetype] ?? "#fff" }}
+    <div className="rounded-[30px] border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)] p-4 shadow-[0_24px_70px_rgba(0,0,0,0.28)]">
+      <div
+        ref={containerRef}
+        className="relative overflow-hidden rounded-[26px] border border-[rgba(255,255,255,0.08)] bg-[radial-gradient(circle_at_18%_12%,rgba(245,158,11,0.16),transparent_30%),radial-gradient(circle_at_82%_18%,rgba(59,130,246,0.12),transparent_34%),linear-gradient(180deg,rgba(13,17,26,0.98)_0%,rgba(6,9,16,0.98)_100%)]"
+      >
+        <svg width="100%" height={renderedHeight} viewBox={`0 0 ${SCENE_W} ${SCENE_H}`} className="block">
+          <defs>
+            <radialGradient id="star-glow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#fef3c7" />
+              <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
+            </radialGradient>
+            <filter id="soft-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="8" result="coloredBlur" />
+              <feMerge>
+                <feMergeNode in="coloredBlur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <filter id="network-glow" x="-80%" y="-80%" width="260%" height="260%">
+              <feGaussianBlur stdDeviation="14" result="networkBlur" />
+              <feColorMatrix
+                in="networkBlur"
+                type="matrix"
+                values="1 0 0 0 0
+                        0 1 0 0 0
+                        0 0 1 0 0
+                        0 0 0 0.55 0"
+              />
+              <feMerge>
+                <feMergeNode />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            {renderedLinks.map((link) => (
+              <linearGradient
+                key={`line-${link.id}`}
+                id={`line-${link.id}`}
+                x1="0%"
+                y1="0%"
+                x2="100%"
+                y2="0%"
               >
-                {ARCHETYPE_LABELS[selectedAgent.archetype]}
-              </div>
-              <div className="flex min-w-[118px] flex-col items-end">
-                <div className="ui-mono text-sm font-bold text-[var(--text-bright)]">
-                  {Math.round(selectedState.belief * 100)}%
-                </div>
-                <div
-                  className="ui-mono text-[10px] uppercase tracking-[0.12em]"
-                  style={{
-                    color:
-                      selectedState.belief - selectedState.previousBelief >= 0
-                        ? "var(--success)"
-                        : "var(--danger)",
-                  }}
+                <stop offset="0%" stopColor={link.color} stopOpacity={link.kind === "share" ? 1 : 0.16} />
+                <stop offset="50%" stopColor={link.kind === "share" ? "#fde68a" : link.color} stopOpacity={link.kind === "share" ? 0.78 : 0.3} />
+                <stop offset="100%" stopColor={link.secondaryColor ?? link.color} stopOpacity={link.kind === "share" ? 1 : 0.16} />
+              </linearGradient>
+            ))}
+            {renderedLinks
+              .filter((link) => link.kind === "share")
+              .map((link) => (
+                <linearGradient
+                  key={`gradient-${link.id}`}
+                  id={`gradient-${link.id}`}
+                  x1="0%"
+                  y1="0%"
+                  x2="100%"
+                  y2="0%"
                 >
-                  {selectedState.belief - selectedState.previousBelief >= 0 ? "+" : ""}
-                  {Math.round((selectedState.belief - selectedState.previousBelief) * 100)} pt
-                </div>
-                <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${selectedState.confidence * 100}%`,
-                      background: ARCHETYPE_COLORS[selectedAgent.archetype] ?? "#fff",
-                    }}
+                  <stop offset="0%" stopColor={link.color} />
+                  <stop offset="100%" stopColor={link.secondaryColor ?? link.color} />
+                </linearGradient>
+              ))}
+            {renderedLinks
+              .filter((link) => link.kind === "share")
+              .map((link) => (
+                <marker
+                  key={`marker-${link.id}`}
+                  id={`marker-${link.id}`}
+                  markerWidth="8"
+                  markerHeight="8"
+                  refX="7"
+                  refY="4"
+                  orient="auto"
+                >
+                  <path d="M0,0 L8,4 L0,8 z" fill={link.secondaryColor ?? link.color} />
+                </marker>
+              ))}
+          </defs>
+
+          {Array.from({ length: 180 }).map((_, index) => {
+            const x = seededUnit(`star-x-${index}`) * SCENE_W;
+            const y = seededUnit(`star-y-${index}`) * SCENE_H;
+            const r = 0.6 + seededUnit(`star-r-${index}`) * 1.8;
+            return (
+              <circle
+                key={`star-${index}`}
+                cx={x}
+                cy={y}
+                r={r}
+                fill="url(#star-glow)"
+                opacity={0.35 + seededUnit(`star-o-${index}`) * 0.5}
+              />
+            );
+          })}
+
+          <g>
+            {renderedLinks.map((link) => {
+              const metrics = curveMetrics(link);
+              if (!metrics) return null;
+              const labelPos = labelPosition(link);
+
+              return (
+                <g key={link.id}>
+                  <path
+                    d={metrics.path}
+                    fill="none"
+                    stroke={
+                      link.kind === "share"
+                        ? "rgba(245,158,11,0.24)"
+                        : link.kind === "ambient"
+                          ? "rgba(148,163,184,0.12)"
+                          : "rgba(148,163,184,0.18)"
+                    }
+                    strokeWidth={link.kind === "share" ? 14 : link.kind === "ambient" ? 5 : link.isHighlighted ? 9 : 7}
+                    strokeOpacity={link.kind === "share" ? 0.22 : link.kind === "ambient" ? 0.12 : link.isHighlighted ? 0.24 : 0.16}
+                    filter="url(#network-glow)"
                   />
-                </div>
-              </div>
+                  <path
+                    d={metrics.path}
+                    fill="none"
+                    stroke={
+                      link.kind === "share"
+                        ? `url(#line-${link.id})`
+                        : link.kind === "ambient"
+                          ? "rgba(148,163,184,0.42)"
+                          : link.isHighlighted
+                            ? "#cbd5e1"
+                            : "rgba(148,163,184,0.88)"
+                    }
+                    strokeWidth={
+                      link.kind === "share"
+                        ? link.isHighlighted
+                          ? 4.5
+                          : 3.6
+                        : link.kind === "ambient"
+                          ? link.isHighlighted
+                            ? 2.8
+                            : 1.6
+                        : link.isHighlighted
+                          ? 3.4
+                          : 2.2 + link.strength * 2.2
+                    }
+                    strokeOpacity={
+                      link.kind === "share"
+                        ? link.isHighlighted
+                          ? 1
+                          : 0.92
+                        : link.kind === "ambient"
+                          ? link.isHighlighted
+                            ? 0.52
+                            : 0.3
+                        : link.isHighlighted
+                          ? 0.96
+                          : 0.72
+                    }
+                    markerEnd={link.kind === "share" ? `url(#marker-${link.id})` : undefined}
+                    strokeLinecap="round"
+                    filter={link.kind === "share" ? "url(#soft-glow)" : "url(#soft-glow)"}
+                    className={link.kind === "share" ? "constellation-share-path" : undefined}
+                  />
+                  {link.kind === "share" && (
+                    <>
+                      <circle r="3.5" fill={link.color} filter="url(#soft-glow)">
+                        <animateMotion dur="1.9s" repeatCount="indefinite" path={metrics.path} />
+                      </circle>
+                      <circle r="2.2" fill={link.secondaryColor ?? link.color} opacity="0.9">
+                        <animateMotion dur="1.9s" begin="0.55s" repeatCount="indefinite" path={metrics.path} />
+                      </circle>
+                    </>
+                  )}
+                  {link.kind === "trust" && link.isHighlighted && (
+                    <circle r="2.4" fill={link.color} opacity="0.75">
+                      <animateMotion dur="2.8s" repeatCount="indefinite" path={metrics.path} />
+                    </circle>
+                  )}
+                  {link.kind === "share" && labelPos && (
+                    <g transform={`translate(${labelPos.x}, ${labelPos.y})`}>
+                      <rect
+                        x={-(Math.max(90, link.label.length * 6.5) / 2)}
+                        y="-13"
+                        width={Math.max(90, link.label.length * 6.5)}
+                        height="26"
+                        rx="13"
+                        fill="rgba(8,11,18,0.92)"
+                        stroke={link.isHighlighted ? "rgba(245,158,11,0.32)" : "rgba(255,255,255,0.08)"}
+                      />
+                      <text
+                        textAnchor="middle"
+                        dominantBaseline="central"
+                        fontSize="11"
+                        fontFamily="var(--font-mono)"
+                        fill="#dbe5f2"
+                        letterSpacing="0.02em"
+                      >
+                        {link.label}
+                      </text>
+                    </g>
+                  )}
+                </g>
+              );
+            })}
+          </g>
+
+          <g>
+            {animatedNodes.map((node) => {
+              const nodeColor = ARCHETYPE_COLORS[node.archetype] ?? "#0f172a";
+              const label = shortName(node.name);
+              const labelWidth = Math.max(84, label.length * 8 + 44);
+              const nodeX = node.x ?? SCENE_W / 2;
+              const nodeY = node.y ?? SCENE_H / 2;
+
+              return (
+                <g
+                  key={node.id}
+                  transform={`translate(${nodeX}, ${nodeY})`}
+                  onClick={() => onSelectAgent(node.id)}
+                  style={{ cursor: "pointer" }}
+                  className="constellation-node-group"
+                >
+                  {node.isSelected && (
+                    <circle r={node.radius + 11} fill={nodeColor} opacity="0.12" />
+                  )}
+                  {node.isActive && (
+                    <circle r={node.radius + 18} fill="none" stroke={nodeColor} strokeOpacity="0.22" className="constellation-node-pulse" />
+                  )}
+                  <circle
+                    r={node.radius + (node.isActive ? 5 : 2)}
+                    fill={nodeColor}
+                    opacity={node.isActive ? 0.16 : 0.08}
+                  />
+                  <circle
+                    r={node.radius}
+                    fill="rgba(7,9,17,0.96)"
+                    stroke={nodeColor}
+                    strokeWidth={node.isSelected ? 3 : 2}
+                  />
+                  <circle
+                    r={Math.max(3.5, node.radius - 5)}
+                    fill={nodeColor}
+                    filter={node.isActive ? "url(#soft-glow)" : undefined}
+                  />
+
+                  <g transform={`translate(${node.radius + 12}, -16)`}>
+                    <rect
+                      width={labelWidth}
+                      height="34"
+                      rx="17"
+                      fill="rgba(7,9,17,0.88)"
+                      stroke={node.isSelected ? "rgba(245,158,11,0.34)" : "rgba(255,255,255,0.08)"}
+                    />
+                    <circle cx="14" cy="17" r="4" fill={nodeColor} />
+                    <text x="24" y="14" fontSize="12" fontWeight="600" fill="#f8fafc">
+                      {label}
+                    </text>
+                    <text x={labelWidth - 10} y="14" textAnchor="end" fontSize="11" fill={beliefTone(node.belief)} fontFamily="var(--font-mono)">
+                      {Math.round(node.belief * 100)}%
+                    </text>
+                    <text x="24" y="25" fontSize="9.5" fill="#8b97ab" fontFamily="var(--font-mono)" letterSpacing="0.12em">
+                      {node.isActive ? "ACTIVE" : "STABLE"}
+                    </text>
+                  </g>
+                </g>
+              );
+            })}
+          </g>
+        </svg>
+
+        <div className="pointer-events-none absolute left-5 top-5 flex flex-wrap items-center gap-2">
+          <LegendChip label="Trust" color="#94a3b8" />
+          <LegendChip label="Flow" color="#f59e0b" />
+          <LegendChip label="Focus" color="#f59e0b" strong />
+        </div>
+        {selectedNode && (
+          <div className="pointer-events-none absolute right-5 top-5 min-w-[280px] rounded-[20px] border border-[rgba(255,255,255,0.08)] bg-[rgba(7,9,17,0.84)] px-4 py-3 backdrop-blur">
+            <div className="mb-2 flex items-center gap-2">
+              <span
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ background: ARCHETYPE_COLORS[selectedNode.archetype] ?? "#0f172a" }}
+              />
+              <span className="text-[15px] font-semibold text-[var(--text-bright)]">{selectedNode.name}</span>
+            </div>
+            <div className="mb-3 ui-mono text-[10px] uppercase tracking-[0.14em]" style={{ color: ARCHETYPE_COLORS[selectedNode.archetype] ?? "var(--text-muted)" }}>
+              {ARCHETYPE_LABELS[selectedNode.archetype]}
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <MiniStat label="Belief" value={`${Math.round(selectedNode.belief * 100)}%`} color={beliefTone(selectedNode.belief)} />
+              <MiniStat label="Delta" value={`${selectedNode.delta >= 0 ? "+" : ""}${Math.round(selectedNode.delta * 100)}pt`} color={selectedNode.delta >= 0 ? "#34d399" : "#fb7185"} />
+              <MiniStat label="Confidence" value={`${Math.round(selectedNode.confidence * 100)}%`} color="var(--text-primary)" />
             </div>
           </div>
         )}
       </div>
+    </div>
+  );
+}
 
-      <div
-        className="overflow-y-auto rounded-[18px] border border-[rgba(255,255,255,0.06)] bg-[radial-gradient(circle_at_50%_0%,rgba(34,197,94,0.045),transparent_30%),radial-gradient(circle_at_85%_15%,rgba(59,130,246,0.08),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.008))] p-3"
-        style={{ height: 620 }}
-      >
-        <div className="relative mx-auto" style={{ width: SCENE_W, height: SCENE_H }}>
-          {Array.from({ length: 6 }).map((_, index) => {
-            const x = X_PAD + (index / 5) * (SCENE_W - X_PAD * 2);
-            return (
-              <div
-                key={`vx-${index}`}
-                className="absolute top-0 bottom-0 border-l border-dashed border-white/10"
-                style={{ left: x }}
-              />
-            );
-          })}
-          {Array.from({ length: 5 }).map((_, index) => {
-            const y = Y_PAD + (index / 4) * (SCENE_H - Y_PAD * 2);
-            return (
-              <div
-                key={`hz-${index}`}
-                className="absolute left-0 right-0 border-t border-dashed border-white/10"
-                style={{ top: y }}
-              />
-            );
-          })}
+function MiniStat({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div className="rounded-[16px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-3 py-2.5">
+      <div className="mb-1 ui-mono text-[10px] uppercase tracking-[0.14em] text-[var(--text-subtle)]">{label}</div>
+      <div className="ui-mono text-[15px] font-semibold" style={{ color }}>{value}</div>
+    </div>
+  );
+}
 
-          <div
-            className="pointer-events-none absolute left-[72px] top-[18px] ui-mono text-[11px] tracking-[0.16em] text-[#9eb0c8]"
-          >
-            HIGH CONFIDENCE
-          </div>
-          <div
-            className="pointer-events-none absolute left-[72px] bottom-[8px] ui-mono text-[11px] tracking-[0.16em] text-[#9eb0c8]"
-          >
-            BEARISH
-          </div>
-          <div
-            className="pointer-events-none absolute right-[24px] bottom-[8px] ui-mono text-[11px] tracking-[0.16em] text-[#9eb0c8]"
-          >
-            BULLISH
-          </div>
-
-          {edges.map((edge) => {
-            const from = points.get(edge.from);
-            const to = points.get(edge.to);
-            const fromAgent = agents.find((agent) => agent.id === edge.from);
-            if (!from || !to || !fromAgent) return null;
-            const active =
-              selectedAgentId != null &&
-              (selectedAgentId === edge.from || selectedAgentId === edge.to);
-            const color = ARCHETYPE_COLORS[fromAgent.archetype] ?? "#fff";
-            return (
-              <div
-                key={`${edge.from}-${edge.to}`}
-                className="absolute rounded-full transition-all duration-500 ease-out"
-                style={{
-                  ...edgeStyle(from, to),
-                  height: active ? 3 : 1 + edge.trust * 2,
-                  background: color,
-                  opacity: active ? 0.72 : 0.14 + edge.trust * 0.38,
-                }}
-              />
-            );
-          })}
-
-          {agents.map((agent) => {
-            const point = points.get(agent.id);
-            const state = stateById.get(agent.id);
-            if (!point || !state) return null;
-            const color = ARCHETYPE_COLORS[agent.archetype] ?? "#fff";
-            const selected = selectedAgent?.id === agent.id;
-            const isSharing = state.action === "share_claim";
-            const dotSize = selected ? 16 : 12;
-
-            return (
-              <button
-                key={agent.id}
-                type="button"
-                onClick={() => onSelectAgent(agent.id)}
-                className="absolute transition-all duration-500 ease-out"
-                style={{
-                  left: point.x,
-                  top: point.y,
-                  transform: "translate(-50%, -50%)",
-                  background: "transparent",
-                  border: "none",
-                  padding: 0,
-                  cursor: "pointer",
-                }}
-                title={`${agent.name} ${Math.round(state.belief * 100)}%`}
-              >
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: selected ? -12 : -9,
-                    borderRadius: "999px",
-                    border: `1px solid ${color}`,
-                    opacity: isSharing || selected ? 0.45 : 0.18,
-                    boxShadow: selected ? `0 0 20px ${color}` : "none",
-                  }}
-                />
-                <div
-                  style={{
-                    width: dotSize,
-                    height: dotSize,
-                    borderRadius: "999px",
-                    background: color,
-                    boxShadow: isSharing
-                      ? `0 0 18px ${color}, 0 0 34px ${color}55`
-                      : `0 0 12px ${color}66`,
-                    position: "relative",
-                    zIndex: 2,
-                  }}
-                />
-                <div
-                  className="pointer-events-none absolute whitespace-nowrap ui-mono text-[11px] uppercase tracking-[0.12em]"
-                  style={{
-                    left: 16,
-                    top: -6,
-                    color: selected ? "#f5f7fb" : "#a5b4c7",
-                    transition: "all 500ms ease-out",
-                  }}
-                >
-                  {shortName(agent.name)}
-                  <span style={{ marginLeft: 8, color }}>{Math.round(state.belief * 100)}%</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
+function LegendChip({
+  label,
+  color,
+  dashed = false,
+  strong = false,
+}: {
+  label: string;
+  color: string;
+  dashed?: boolean;
+  strong?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(7,9,17,0.82)] px-3 py-1.5 backdrop-blur">
+      <span
+        className="block h-[2px] w-5 rounded-full"
+        style={{
+          background: color,
+          opacity: strong ? 1 : 0.75,
+          borderTop: dashed ? `2px dashed ${color}` : undefined,
+          height: dashed ? 0 : 2,
+        }}
+      />
+      <span className="ui-mono text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">{label}</span>
     </div>
   );
 }

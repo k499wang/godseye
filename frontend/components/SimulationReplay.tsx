@@ -1,41 +1,32 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { SimulationResponse, TickSnapshot } from "@/lib/types";
-import { BeliefChart } from "./BeliefChart";
-import { AgentDebateFeed } from "./AgentDebateFeed";
 import { AgentConstellation } from "./AgentConstellation";
+import { ARCHETYPE_COLORS, ARCHETYPE_LABELS } from "@/lib/constants";
 
 interface SimulationReplayProps {
   simulation: SimulationResponse;
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, { bg: string; text: string; dot: string }> = {
-    pending: {
-      bg: "rgba(148, 163, 184, 0.12)",
-      text: "var(--text-secondary)",
-      dot: "#94a3b8",
-    },
-    building: { bg: "rgba(245,158,11,0.14)", text: "var(--accent)", dot: "var(--accent)" },
-    running: { bg: "rgba(52,211,153,0.14)", text: "var(--success)", dot: "var(--success)" },
-    complete: { bg: "rgba(96,165,250,0.14)", text: "#93c5fd", dot: "#93c5fd" },
-    failed: { bg: "rgba(251,113,133,0.14)", text: "var(--danger)", dot: "var(--danger)" },
+  const colors: Record<string, { bg: string; text: string; dot: string; border: string }> = {
+    pending: { bg: "rgba(148,163,184,0.08)", text: "#94a3b8", dot: "#94a3b8", border: "rgba(148,163,184,0.18)" },
+    building: { bg: "rgba(245,158,11,0.10)", text: "#f59e0b", dot: "#f59e0b", border: "rgba(245,158,11,0.22)" },
+    running: { bg: "rgba(52,211,153,0.10)", text: "#34d399", dot: "#34d399", border: "rgba(52,211,153,0.22)" },
+    complete: { bg: "rgba(96,165,250,0.10)", text: "#93c5fd", dot: "#60a5fa", border: "rgba(96,165,250,0.22)" },
+    failed: { bg: "rgba(251,113,133,0.10)", text: "#fb7185", dot: "#fb7185", border: "rgba(251,113,133,0.22)" },
   };
-  const c = colors[status] ?? colors.pending;
+  const color = colors[status] ?? colors.pending;
 
   return (
     <span
-      className="ui-mono inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]"
-      style={{ background: c.bg, color: c.text }}
+      className="ui-mono inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em]"
+      style={{ background: color.bg, color: color.text, borderColor: color.border }}
     >
       <span
         className="h-2 w-2 rounded-full"
-        style={{
-          background: c.dot,
-          boxShadow: status === "running" ? `0 0 10px ${c.dot}` : "none",
-          animation: status === "running" ? "pulse 1.5s ease-in-out infinite" : "none",
-        }}
+        style={{ background: color.dot, animation: status === "running" ? "pulse 1.4s ease-in-out infinite" : "none" }}
       />
       {status}
     </span>
@@ -57,22 +48,19 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
   const latestLoadedTick = loadedTicks > 0 ? tickData[loadedTicks - 1].tick : 1;
 
   const currentSnapshot: TickSnapshot | null =
-    tickData.find((t) => t.tick === currentTick) ?? null;
+    tickData.find((snapshot) => snapshot.tick === currentTick) ?? null;
+  const currentIndex = tickData.findIndex((snapshot) => snapshot.tick === currentTick);
   const previousSnapshot: TickSnapshot | null =
-    tickData.find((t) => t.tick === currentTick - 1) ?? null;
-
-  const handleTickSelect = useCallback(
-    (tick: number) => {
-      const snap = tickData.find((t) => t.tick === tick);
-      if (snap) setCurrentTick(tick);
-    },
-    [tickData]
-  );
+    currentIndex > 0 ? tickData[currentIndex - 1] : null;
 
   useEffect(() => {
-    if (simulation.status === "running" || simulation.status === "building" || simulation.status === "pending") {
+    if (
+      simulation.status === "running" ||
+      simulation.status === "building" ||
+      simulation.status === "pending"
+    ) {
       setCurrentTick(latestLoadedTick);
-    } else if (!tickData.find((tick) => tick.tick === currentTick)) {
+    } else if (!tickData.find((snapshot) => snapshot.tick === currentTick)) {
       setCurrentTick(latestLoadedTick);
     }
   }, [currentTick, latestLoadedTick, simulation.status, tickData]);
@@ -82,175 +70,190 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
       setSelectedAgentId(null);
       return;
     }
-    if (selectedAgentId && agents.some((agent) => agent.id === selectedAgentId)) {
-      return;
-    }
+    if (selectedAgentId && agents.some((agent) => agent.id === selectedAgentId)) return;
     setSelectedAgentId(agents[0].id);
   }, [agents, selectedAgentId]);
+
+  const handleTickSelect = useCallback(
+    (tick: number) => {
+      if (tickData.find((snapshot) => snapshot.tick === tick)) setCurrentTick(tick);
+    },
+    [tickData]
+  );
 
   const consensusAtTick = currentSnapshot
     ? currentSnapshot.agent_states.reduce((sum, state) => sum + state.belief, 0) /
       currentSnapshot.agent_states.length
     : null;
 
-  return (
-    <div className="min-h-[1500px] bg-[var(--bg-base)] text-[var(--text-primary)]">
-      <div className="flex items-center justify-between gap-4 border-b border-white/6 px-3 py-2">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="eyebrow">Simulation replay</span>
-          <span className="ui-mono text-[13px] text-[var(--text-muted)]">
-            {simulation.id.slice(0, 8).toUpperCase()}
-          </span>
-          <StatusBadge status={simulation.status} />
-        </div>
+  const selectedAgent = agents.find((agent) => agent.id === selectedAgentId) ?? null;
+  const selectedAgentState =
+    selectedAgent && currentSnapshot
+      ? currentSnapshot.agent_states.find((state) => state.agent_id === selectedAgent.id) ?? null
+      : null;
+  const previousSelectedState =
+    selectedAgent && previousSnapshot
+      ? previousSnapshot.agent_states.find((state) => state.agent_id === selectedAgent.id) ?? null
+      : null;
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 rounded-full border border-[rgba(245,158,11,0.16)] bg-[rgba(255,255,255,0.02)] px-2 py-1.5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+  const selectedAgentDelta =
+    selectedAgent && selectedAgentState && previousSelectedState
+      ? selectedAgentState.belief - previousSelectedState.belief
+      : selectedAgent && selectedAgentState
+        ? selectedAgentState.belief - selectedAgent.initial_belief
+        : 0;
+
+  return (
+    <div className="mx-auto max-w-[1680px] px-6 py-8 text-[var(--text-primary)] md:px-8 xl:px-10">
+      <div className="mb-5 rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)] px-5 py-4 shadow-[0_20px_60px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="ui-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">
+              Constellation Replay
+            </span>
+            <span className="ui-mono text-[12px] text-[var(--text-subtle)]">
+              {simulation.id.slice(0, 8).toUpperCase()}
+            </span>
+            <StatusBadge status={simulation.status} />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-5">
+            {consensusAtTick !== null && (
+              <MetricInline
+                label="Consensus"
+                value={`${Math.round(consensusAtTick * 100)}%`}
+                color={beliefTone(consensusAtTick)}
+              />
+            )}
+            <MetricInline label="Agents" value={String(agents.length)} />
+            <MetricInline label="Ticks" value={`${loadedTicks}/${totalTicks}`} />
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-6 rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)] px-5 py-4 shadow-[0_16px_50px_rgba(0,0,0,0.24)] backdrop-blur-xl">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
             <button
-              className="ui-mono rounded-full border border-[rgba(245,158,11,0.28)] bg-[rgba(245,158,11,0.08)] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] shadow-[0_6px_20px_rgba(245,158,11,0.14)] transition hover:bg-[rgba(245,158,11,0.14)] hover:shadow-[0_8px_24px_rgba(245,158,11,0.22)]"
+              className="rounded-full border border-[rgba(245,158,11,0.22)] bg-[rgba(245,158,11,0.08)] px-4 py-2 ui-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] transition hover:bg-[rgba(245,158,11,0.14)]"
               onClick={() => {
-                const index = tickData.findIndex((tick) => tick.tick === currentTick);
+                const index = tickData.findIndex((snapshot) => snapshot.tick === currentTick);
                 if (index > 0) setCurrentTick(tickData[index - 1].tick);
               }}
             >
               Prev
             </button>
-            <div className="flex items-center gap-2 px-2">
-              <span className="eyebrow">Tick</span>
-              <span className="ui-mono text-base font-semibold text-[var(--accent)]">
+            <div className="rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-4 py-2">
+              <span className="ui-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Tick </span>
+              <span className="ui-mono text-[16px] font-bold text-[var(--accent)]">
                 {String(currentTick).padStart(2, "0")}
               </span>
             </div>
             <button
-              className="ui-mono rounded-full border border-[rgba(245,158,11,0.28)] bg-[rgba(245,158,11,0.08)] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] shadow-[0_6px_20px_rgba(245,158,11,0.14)] transition hover:bg-[rgba(245,158,11,0.14)] hover:shadow-[0_8px_24px_rgba(245,158,11,0.22)]"
+              className="rounded-full border border-[rgba(245,158,11,0.22)] bg-[rgba(245,158,11,0.08)] px-4 py-2 ui-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] transition hover:bg-[rgba(245,158,11,0.14)]"
               onClick={() => {
-                const index = tickData.findIndex((tick) => tick.tick === currentTick);
+                const index = tickData.findIndex((snapshot) => snapshot.tick === currentTick);
                 if (index < tickData.length - 1) setCurrentTick(tickData[index + 1].tick);
               }}
             >
               Next
             </button>
           </div>
-          {consensusAtTick !== null && (
-            <MetricInline
-              label="Consensus"
-              value={`${Math.round(consensusAtTick * 100)}%`}
-              color={
-                consensusAtTick >= 0.55
-                  ? "var(--success)"
-                  : consensusAtTick >= 0.45
-                    ? "var(--accent)"
-                    : "var(--danger)"
-              }
-            />
-          )}
-          <MetricInline label="Agents" value={String(agents.length)} />
-          <MetricInline label="Ticks" value={`${loadedTicks}/${totalTicks}`} />
+
+          <span className="ui-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-subtle)]">
+            {loadedTicks} loaded / {totalTicks} total
+          </span>
+        </div>
+
+        <div className="relative h-2 rounded-full bg-[rgba(255,255,255,0.08)]">
+          <div
+            className="absolute inset-y-0 left-0 rounded-full bg-[linear-gradient(90deg,var(--accent),#fbbf24)]"
+            style={{ width: `${(loadedTicks / totalTicks) * 100}%` }}
+          />
+          {tickData.map((snapshot) => {
+            const pct = ((snapshot.tick - 1) / Math.max(totalTicks - 1, 1)) * 100;
+            const isActive = snapshot.tick === currentTick;
+            return (
+              <button
+                key={snapshot.tick}
+                type="button"
+                className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 transition-all"
+                style={{
+                  left: `${pct}%`,
+                  width: isActive ? 16 : 12,
+                  height: isActive ? 16 : 12,
+                  background: isActive ? "var(--accent)" : "rgba(255,255,255,0.92)",
+                  borderColor: isActive ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.22)",
+                  boxShadow: isActive ? "0 0 0 4px rgba(245,158,11,0.16)" : "none",
+                }}
+                onClick={() => handleTickSelect(snapshot.tick)}
+                title={`Tick ${snapshot.tick}`}
+              />
+            );
+          })}
+        </div>
+        <div className="mt-2 flex justify-between ui-mono text-[10px] text-[var(--text-subtle)]">
+          <span>1</span>
+          <span>{totalTicks}</span>
         </div>
       </div>
 
-      <div className="border-b border-white/6 px-3 py-1.5">
-        <div className="relative">
-          <div className="relative h-1.5 w-full rounded-full bg-[rgba(255,255,255,0.08)]">
-            <div
-              className="absolute left-0 top-0 h-full rounded-full bg-[rgba(245,158,11,0.22)]"
-              style={{ width: `${(loadedTicks / totalTicks) * 100}%` }}
-            />
-            {Array.from({ length: loadedTicks }).map((_, index) => {
-              const tick = tickData[index].tick;
-              const pct = ((tick - 1) / (totalTicks - 1)) * 100;
-              const isActive = tick === currentTick;
+      <AgentConstellation
+        agents={agents}
+        tickData={tickData}
+        currentTick={currentTick}
+        selectedAgentId={selectedAgentId}
+        onSelectAgent={setSelectedAgentId}
+      />
 
-              return (
-                <button
-                  key={tick}
-                  className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full transition-all"
-                  style={{
-                    left: `${pct}%`,
-                    width: isActive ? 14 : 9,
-                    height: isActive ? 14 : 9,
-                    background: isActive ? "var(--accent)" : "rgba(245,158,11,0.45)",
-                    boxShadow: isActive ? "0 0 18px rgba(245,158,11,0.28)" : "none",
-                    border: isActive ? "3px solid rgba(255,255,255,0.82)" : "none",
-                  }}
-                  onClick={() => handleTickSelect(tick)}
-                  title={`Tick ${tick}`}
-                />
-              );
-            })}
-          </div>
-
-          <div className="mt-1.5 flex justify-between text-[11px] text-[var(--text-muted)]">
-            <span className="ui-mono">1</span>
-            <span className="ui-mono">{totalTicks}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex">
-        <div className="flex flex-col border-r border-white/6" style={{ width: "70%" }}>
-          <div className="border-b border-white/6 p-2">
-            <AgentConstellation
-              agents={agents}
-              tickData={tickData}
-              currentTick={currentTick}
-              selectedAgentId={selectedAgentId}
-              onSelectAgent={setSelectedAgentId}
-            />
-          </div>
-
-          <div className="p-2" style={{ minHeight: 312 }}>
-            <div className="mb-1 flex items-center gap-2">
-              <span className="eyebrow">Belief motion timeline</span>
+      {selectedAgent && selectedAgentState && (
+        <div className="mt-6 rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)] px-5 py-4 shadow-[0_14px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span
+                className="h-3 w-3 rounded-full"
+                style={{ background: ARCHETYPE_COLORS[selectedAgent.archetype] ?? "#0f172a" }}
+              />
+              <div>
+                <div className="text-[17px] font-semibold text-[var(--text-bright)]">{selectedAgent.name}</div>
+                <div
+                  className="ui-mono text-[10px] uppercase tracking-[0.16em]"
+                  style={{ color: ARCHETYPE_COLORS[selectedAgent.archetype] ?? "var(--text-muted)" }}
+                >
+                  {ARCHETYPE_LABELS[selectedAgent.archetype]}
+                </div>
+              </div>
             </div>
-            <div style={{ height: 280 }}>
-              <BeliefChart
-                agents={agents}
-                tickData={tickData}
-                currentTick={currentTick}
-                totalTicks={totalTicks}
-                onTickSelect={handleTickSelect}
+
+            <div className="flex flex-wrap items-center gap-5">
+              <MetricInline label="Belief" value={`${Math.round(selectedAgentState.belief * 100)}%`} color={beliefTone(selectedAgentState.belief)} />
+              <MetricInline label="Delta" value={`${selectedAgentDelta >= 0 ? "+" : ""}${Math.round(selectedAgentDelta * 100)}pt`} color={selectedAgentDelta >= 0 ? "#059669" : "#dc2626"} />
+              <MetricInline label="Confidence" value={`${Math.round(selectedAgentState.confidence * 100)}%`} />
+              <MetricInline
+                label="Mode"
+                value={selectedAgentState.action_taken === "share_claim" ? "share" : "update"}
               />
             </div>
           </div>
         </div>
-
-        <div className="flex flex-1 flex-col">
-          <div className="p-2">
-            <div className="mb-1 flex items-center gap-2">
-              <span className="eyebrow">Claim propagation stream</span>
-            </div>
-            <AgentDebateFeed
-              agents={agents}
-              tickSnapshot={currentSnapshot}
-              previousTickSnapshot={previousSnapshot}
-              currentTick={currentTick}
-            />
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
 
-function MetricInline({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color?: string;
-}) {
+function MetricInline({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="eyebrow">{label}</span>
-      <span
-        className="ui-mono text-sm font-semibold"
-        style={{ color: color ?? "var(--text-primary)" }}
-      >
+      <span className="ui-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-subtle)]">{label}</span>
+      <span className="ui-mono text-[13px] font-semibold" style={{ color: color ?? "var(--text-primary)" }}>
         {value}
       </span>
     </div>
   );
+}
+
+function beliefTone(value: number): string {
+  if (value >= 0.65) return "#059669";
+  if (value >= 0.5) return "#d97706";
+  return "#dc2626";
 }

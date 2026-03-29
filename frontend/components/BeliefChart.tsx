@@ -54,7 +54,7 @@ export function BeliefChart({
   }
 
   return (
-    <div className="h-full w-full rounded-[24px] border border-white/8 bg-[rgba(255,255,255,0.02)] p-2">
+    <div className="h-full w-full rounded-[24px] border border-[#e2e8f0] bg-[#f8fafc] p-2">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart
           data={data}
@@ -67,19 +67,19 @@ export function BeliefChart({
         >
           <CartesianGrid
             strokeDasharray="3 5"
-            stroke="rgba(255,255,255,0.08)"
+            stroke="#e2e8f0"
             vertical={false}
           />
           <XAxis
             dataKey="tick"
-            tick={{ fill: "#8b97ab", fontSize: 11, fontFamily: "var(--font-mono)" }}
+            tick={{ fill: "#64748b", fontSize: 11, fontFamily: "var(--font-mono)" }}
             tickLine={false}
-            axisLine={{ stroke: "rgba(255,255,255,0.1)" }}
+            axisLine={{ stroke: "#cbd5e1" }}
             label={{
               value: "TICK",
               position: "insideBottomRight",
               offset: -2,
-              fill: "#8b97ab",
+              fill: "#64748b",
               fontSize: 10,
               fontFamily: "var(--font-mono)",
             }}
@@ -89,24 +89,24 @@ export function BeliefChart({
             domain={[0, 1]}
             ticks={[0, 0.25, 0.5, 0.75, 1]}
             tickFormatter={(value) => `${Math.round(value * 100)}%`}
-            tick={{ fill: "#8b97ab", fontSize: 11, fontFamily: "var(--font-mono)" }}
+            tick={{ fill: "#64748b", fontSize: 11, fontFamily: "var(--font-mono)" }}
             tickLine={false}
             axisLine={false}
             width={46}
           />
           <Tooltip
             contentStyle={{
-              background: "rgba(10, 14, 22, 0.98)",
-              border: "1px solid rgba(245,158,11,0.26)",
+              background: "rgba(255,255,255,0.98)",
+              border: "1px solid #dbe4ee",
               borderRadius: 18,
-              boxShadow: "0 18px 50px rgba(0,0,0,0.32)",
+              boxShadow: "0 18px 50px rgba(15,23,42,0.10)",
               fontFamily: "var(--font-sans)",
               fontSize: 13,
               padding: "12px 14px",
             }}
-            itemStyle={{ color: "#edf2f8" }}
+            itemStyle={{ color: "#0f172a" }}
             labelStyle={{
-              color: "#f59e0b",
+              color: "#2563eb",
               marginBottom: 8,
               fontSize: 11,
               fontFamily: "var(--font-mono)",
@@ -120,17 +120,17 @@ export function BeliefChart({
               return [`${Math.round(numeric * 100)}%`, agent?.name ?? nameValue] as [string, string];
             }}
             labelFormatter={(label) => `Tick ${label}`}
-            cursor={{ stroke: "rgba(245,158,11,0.28)", strokeWidth: 1.5 }}
+            cursor={{ stroke: "#93c5fd", strokeWidth: 1.5 }}
           />
           <ReferenceLine
             y={0.5}
-            stroke="rgba(255,255,255,0.14)"
+            stroke="#cbd5e1"
             strokeDasharray="5 5"
           />
           {currentTick > 0 && (
             <ReferenceLine
               x={currentTick}
-              stroke="rgba(245,158,11,0.6)"
+              stroke="#2563eb"
               strokeWidth={1.75}
             />
           )}
@@ -145,7 +145,7 @@ export function BeliefChart({
               activeDot={{
                 r: 5,
                 fill: ARCHETYPE_COLORS[agent.archetype] ?? "#ffffff",
-                stroke: "#0d1119",
+                stroke: "#ffffff",
                 strokeWidth: 2,
               }}
             />

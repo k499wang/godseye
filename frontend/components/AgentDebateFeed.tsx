@@ -1,13 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import type { AgentSummary, TickSnapshot } from "@/lib/types";
-import { ARCHETYPE_COLORS, ARCHETYPE_LABELS } from "@/lib/constants";
+import { ARCHETYPE_COLORS } from "@/lib/constants";
 
 interface AgentDebateFeedProps {
   agents: AgentSummary[];
   tickSnapshot: TickSnapshot | null;
   previousTickSnapshot: TickSnapshot | null;
   currentTick: number;
+  selectedAgentId?: string | null;
 }
 
 function beliefColor(belief: number): string {
@@ -16,12 +18,72 @@ function beliefColor(belief: number): string {
   return "var(--danger)";
 }
 
-function beliefLabel(belief: number): string {
-  if (belief >= 0.7) return "Bullish";
-  if (belief >= 0.55) return "Lean yes";
-  if (belief >= 0.45) return "Neutral";
-  if (belief >= 0.3) return "Lean no";
-  return "Bearish";
+function compactText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function clip(text: string, limit: number): string {
+  const normalized = compactText(text);
+  if (!normalized) return "";
+  return normalized.length > limit ? `${normalized.slice(0, limit - 3)}...` : normalized;
+}
+
+function deltaLabel(delta: number): string {
+  if (Math.abs(delta) < 0.005) return "flat";
+  return `${delta > 0 ? "+" : ""}${Math.round(delta * 100)} pts`;
+}
+
+function deltaTone(delta: number): string {
+  if (Math.abs(delta) < 0.005) return "var(--text-muted)";
+  return delta > 0 ? "var(--success)" : "var(--danger)";
+}
+
+function trustLabel(delta: number): string {
+  if (Math.abs(delta) < 0.005) return "Trust flat";
+  return `${delta > 0 ? "Trust +" : "Trust "}${delta.toFixed(2)}`;
+}
+
+function ExpandableLine({
+  text,
+  collapsedChars = 140,
+}: {
+  text: string;
+  collapsedChars?: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const normalized = compactText(text);
+  if (!normalized) return null;
+
+  const collapsible = normalized.length > collapsedChars;
+  const visible = !collapsible || expanded
+    ? normalized
+    : `${normalized.slice(0, collapsedChars - 3)}...`;
+
+  return (
+    <div>
+      <p className="text-[13px] leading-6 text-inherit">{visible}</p>
+      {collapsible && (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          className="ui-mono mt-2 text-[10px] uppercase tracking-[0.16em] text-[var(--accent)] transition hover:text-[var(--text-bright)]"
+        >
+          {expanded ? "Read less" : "Read more"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ImpactChip({ label, color }: { label: string; color: string }) {
+  return (
+    <span
+      className="ui-mono rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]"
+      style={{ color, background: "rgba(255,255,255,0.05)" }}
+    >
+      {label}
+    </span>
+  );
 }
 
 export function AgentDebateFeed({
@@ -29,198 +91,278 @@ export function AgentDebateFeed({
   tickSnapshot,
   previousTickSnapshot,
   currentTick,
+  selectedAgentId = null,
 }: AgentDebateFeedProps) {
   if (!tickSnapshot) {
     return (
-      <div className="flex h-full items-center justify-center rounded-[28px] border border-white/8 bg-[rgba(255,255,255,0.02)]">
-        <p className="eyebrow text-[var(--text-muted)]">Select a tick to view debate</p>
+      <div className="flex h-full items-center justify-center rounded-[20px] bg-[#f8fafc]">
+        <p className="ui-mono text-[11px] uppercase tracking-[0.16em] text-[#94a3b8]">Select a tick to view interactions</p>
       </div>
     );
   }
 
-  const states = [...tickSnapshot.agent_states].sort((a, b) => {
-    if (a.action_taken === "share_claim" && b.action_taken !== "share_claim") return -1;
-    if (b.action_taken === "share_claim" && a.action_taken !== "share_claim") return 1;
-    return b.confidence - a.confidence;
-  });
-
-  const summarizeReasoning = (text: string) => {
-    const compact = text.replace(/\s+/g, " ").trim();
-    if (!compact) return "No short commentary";
-    const sentence = compact.split(/[.!?]/)[0]?.trim() || compact;
-    return sentence.length > 88 ? `${sentence.slice(0, 85)}...` : sentence;
-  };
-
   const previousStateById = new Map(
     (previousTickSnapshot?.agent_states ?? []).map((state) => [state.agent_id, state])
   );
+  const currentStateById = new Map(
+    tickSnapshot.agent_states.map((state) => [state.agent_id, state])
+  );
+  const trustByPair = new Map(
+    tickSnapshot.trust_updates.map((update) => [
+      `${update.from_agent_id}:${update.to_agent_id}`,
+      update,
+    ])
+  );
+
+  const exchanges = tickSnapshot.claim_shares.map((share, index) => {
+    const speakerState = currentStateById.get(share.from_agent_id);
+    const listenerState = currentStateById.get(share.to_agent_id);
+    const previousListenerState = previousStateById.get(share.to_agent_id);
+    const trustUpdate = trustByPair.get(`${share.from_agent_id}:${share.to_agent_id}`) ?? null;
+    const involvesSelectedAgent =
+      selectedAgentId !== null &&
+      (share.from_agent_id === selectedAgentId || share.to_agent_id === selectedAgentId);
+
+    const listenerDelta =
+      (listenerState?.belief ?? 0) - (previousListenerState?.belief ?? listenerState?.belief ?? 0);
+    const trustDelta = trustUpdate ? trustUpdate.new_trust - trustUpdate.old_trust : 0;
+
+    return {
+      id: `${share.from_agent_id}-${share.to_agent_id}-${index}`,
+      speakerName: share.from_agent_name,
+      speakerArchetype:
+        agents.find((a) => a.id === share.from_agent_id)?.archetype ?? "bayesian_updater",
+      speakerBelief: speakerState?.belief ?? null,
+      listenerName: share.to_agent_name,
+      listenerArchetype:
+        agents.find((a) => a.id === share.to_agent_id)?.archetype ?? "bayesian_updater",
+      listenerBelief: listenerState?.belief ?? null,
+      claim: compactText(share.claim_text),
+      commentary: compactText(share.commentary) || "Pushes the claim directly.",
+      response: compactText(listenerState?.reasoning ?? "") || "Processing the incoming claim.",
+      listenerDelta,
+      trustDelta,
+      involvesSelectedAgent,
+    };
+  }).sort((a, b) => Number(b.involvesSelectedAgent) - Number(a.involvesSelectedAgent));
+
+  const fallbackMoments = tickSnapshot.agent_states
+    .map((state) => {
+      const previousBelief =
+        previousStateById.get(state.agent_id)?.belief ??
+        agents.find((a) => a.id === state.agent_id)?.initial_belief ??
+        state.belief;
+      return {
+        id: state.agent_id,
+        name: state.name,
+        archetype:
+          agents.find((a) => a.id === state.agent_id)?.archetype ?? "bayesian_updater",
+        delta: state.belief - previousBelief,
+        belief: state.belief,
+        reasoning: compactText(state.reasoning),
+      };
+    })
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, 4);
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto rounded-[24px] border border-white/8 bg-[rgba(255,255,255,0.02)] p-3">
-      <div className="sticky top-0 z-10 -mx-3 -mt-3 mb-3 border-b border-white/8 bg-[rgba(8,11,18,0.94)] px-3 pb-3 pt-3 backdrop-blur-xl">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="eyebrow text-[var(--accent)]">
+    <div className="flex h-full flex-col">
+      <div className="mb-6 flex items-end justify-between gap-4">
+        <div>
+          <div className="ui-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-[#64748b]">Agent interactions</div>
+          <div className="mt-1.5 text-[13px] text-[#64748b]">
             Tick {String(currentTick).padStart(2, "0")}
-          </span>
-          <span className="text-sm text-[var(--text-secondary)]">
-            {states.length} agent updates
-          </span>
-          {tickSnapshot.claim_shares.length > 0 && (
-            <span className="ui-mono rounded-full border border-[rgba(52,211,153,0.24)] bg-[rgba(52,211,153,0.08)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--success)]">
-              {tickSnapshot.claim_shares.length} claim share
-              {tickSnapshot.claim_shares.length > 1 ? "s" : ""}
-            </span>
-          )}
+          </div>
+        </div>
+        <div className="ui-mono text-[11px] uppercase tracking-[0.16em] text-[#94a3b8]">
+          {exchanges.length > 0 ? `${exchanges.length} exchange${exchanges.length > 1 ? "s" : ""}` : "No direct exchanges"}
         </div>
       </div>
 
-      {tickSnapshot.claim_shares.map((share, index) => (
-        <div
-          key={`share-${index}`}
-          className="mb-3 rounded-[18px] border border-[rgba(52,211,153,0.2)] bg-[rgba(52,211,153,0.04)] p-3"
-        >
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="ui-mono rounded-full border border-[rgba(52,211,153,0.24)] bg-[rgba(52,211,153,0.08)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--success)]">
-              Propagation
-            </span>
-            <span className="text-[13px] text-[var(--text-secondary)]">
-              {share.from_agent_name} to {share.to_agent_name}
-            </span>
-          </div>
-          <div className="rounded-[14px] border border-white/6 bg-[rgba(9,14,21,0.45)] px-3 py-2.5">
-            <div className="ui-mono mb-1 text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-              Active claim
-            </div>
-            <p className="text-[13px] leading-5 text-[var(--text-primary)]">
-              {summarizeReasoning(share.claim_text)}
-            </p>
-          </div>
-          <div className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">
-            {summarizeReasoning(share.commentary)}
-          </div>
+      {selectedAgentId && exchanges.some((exchange) => exchange.involvesSelectedAgent) && (
+        <div className="mb-4">
+          <ImpactChip label="Selected agent involved" color="var(--accent)" />
         </div>
-      ))}
+      )}
 
-      <div className="space-y-2.5">
-        {states.map((state) => {
-          const agent = agents.find((entry) => entry.id === state.agent_id);
-          if (!agent) return null;
+      {exchanges.length > 0 ? (
+        <div className="space-y-8">
+          {exchanges.map((ex) => {
+            const speakerColor = ARCHETYPE_COLORS[ex.speakerArchetype] ?? "#fff";
+            const listenerColor = ARCHETYPE_COLORS[ex.listenerArchetype] ?? "#fff";
 
-          const color = ARCHETYPE_COLORS[agent.archetype] ?? "#ffffff";
-          const beliefTone = beliefColor(state.belief);
-          const previousBelief = previousStateById.get(state.agent_id)?.belief ?? agent.initial_belief;
-          const beliefDelta = state.belief - previousBelief;
-          const deltaLabel =
-            beliefDelta === 0
-              ? "No change"
-              : `${beliefDelta > 0 ? "+" : ""}${Math.round(beliefDelta * 100)} pts ${
-                  beliefDelta > 0 ? "up" : "down"
-                }`;
-
-          return (
-            <div key={state.agent_id} className="rounded-[18px] border border-white/8 bg-[rgba(255,255,255,0.025)] p-3">
-              <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="h-2 w-2 rounded-full"
-                    style={{ background: color, boxShadow: `0 0 10px ${color}66` }}
-                  />
-                  <div>
-                    <div className="text-sm font-semibold text-[var(--text-bright)]">
-                      {state.name}
-                    </div>
-                    <div
-                      className="ui-mono text-[10px] uppercase tracking-[0.14em]"
-                      style={{ color: `${color}dd` }}
+            return (
+              <div
+                key={ex.id}
+                className="space-y-1.5 rounded-[22px] px-3 py-3"
+                style={{
+                  background: ex.involvesSelectedAgent ? "#fff7ed" : "transparent",
+                  border: ex.involvesSelectedAgent
+                    ? "1px solid #fed7aa"
+                    : "1px solid transparent",
+                }}
+              >
+                {/* Speaker message */}
+                <div>
+                  <div className="mb-2 flex items-center gap-2">
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ background: speakerColor, boxShadow: `0 0 10px ${speakerColor}88` }}
+                    />
+                    <span
+                      className="text-[13px] font-semibold"
+                      style={{ color: speakerColor }}
                     >
-                      {ARCHETYPE_LABELS[agent.archetype]}
+                      {ex.speakerName}
+                    </span>
+                    {ex.speakerBelief !== null && (
+                      <span className="ui-mono text-[11px] text-[#94a3b8]">
+                        {Math.round(ex.speakerBelief * 100)}%
+                      </span>
+                    )}
+                    <span className="ui-mono text-[10px] text-[#94a3b8]">→ {ex.listenerName}</span>
+                  </div>
+
+                  <div
+                    className="rounded-[18px] px-4 py-3.5"
+                    style={{
+                      background: `${speakerColor}12`,
+                      borderLeft: `2px solid ${speakerColor}66`,
+                    }}
+                  >
+                    <div className="mb-2 rounded-[12px] bg-white/80 px-3 py-2">
+                      <div className="ui-mono mb-1 text-[9px] uppercase tracking-[0.16em] text-[#94a3b8]">
+                        claim
+                      </div>
+                      <p className="text-[12px] italic leading-5 text-[#334155]">
+                        {clip(ex.claim, 200)}
+                      </p>
+                    </div>
+                    <div className="text-[#0f172a]">
+                      <ExpandableLine text={ex.commentary} collapsedChars={160} />
                     </div>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className="ui-mono rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]"
+                {/* Flow indicator */}
+                <div className="flex items-center gap-2 pl-4">
+                  <div
+                    className="h-px flex-1"
                     style={{
-                      color: beliefTone,
-                      borderColor:
-                        beliefTone === "var(--success)"
-                          ? "rgba(52,211,153,0.28)"
-                          : beliefTone === "var(--accent)"
-                            ? "rgba(245,158,11,0.28)"
-                            : "rgba(251,113,133,0.24)",
-                      background:
-                        beliefTone === "var(--success)"
-                          ? "rgba(52,211,153,0.08)"
-                          : beliefTone === "var(--accent)"
-                            ? "rgba(245,158,11,0.08)"
-                            : "rgba(251,113,133,0.08)",
+                      background: `linear-gradient(90deg, ${speakerColor}44, ${listenerColor}44)`,
+                    }}
+                  />
+                  <span className="ui-mono text-[9px] uppercase tracking-[0.14em] text-[#94a3b8]">
+                    responding
+                  </span>
+                  <div
+                    className="h-px flex-1"
+                    style={{
+                      background: `linear-gradient(90deg, ${listenerColor}44, transparent)`,
+                    }}
+                  />
+                </div>
+
+                {/* Listener response */}
+                <div>
+                  <div
+                    className="rounded-[18px] px-4 py-3.5"
+                    style={{
+                      background: "#f8fafc",
+                      borderRight: `2px solid ${listenerColor}55`,
                     }}
                   >
-                    {beliefLabel(state.belief)}
-                  </span>
-                  <span
-                    className="ui-mono text-base font-bold"
-                    style={{ color: beliefTone }}
-                  >
-                    {Math.round(state.belief * 100)}%
-                  </span>
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ background: listenerColor, boxShadow: `0 0 10px ${listenerColor}88` }}
+                        />
+                        <span
+                          className="text-[13px] font-semibold"
+                          style={{ color: listenerColor }}
+                        >
+                          {ex.listenerName}
+                        </span>
+                      </div>
+                      {ex.listenerBelief !== null && (
+                        <span
+                          className="ui-mono text-[12px] font-bold"
+                          style={{ color: beliefColor(ex.listenerBelief) }}
+                        >
+                          {Math.round(ex.listenerBelief * 100)}%
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="text-[#475569]">
+                      <ExpandableLine text={ex.response} collapsedChars={180} />
+                    </div>
+
+                    {(Math.abs(ex.listenerDelta) >= 0.005 || Math.abs(ex.trustDelta) >= 0.005) && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {Math.abs(ex.listenerDelta) >= 0.005 && (
+                          <ImpactChip
+                            label={deltaLabel(ex.listenerDelta)}
+                            color={deltaTone(ex.listenerDelta)}
+                          />
+                        )}
+                        {Math.abs(ex.trustDelta) >= 0.005 && (
+                          <ImpactChip
+                            label={trustLabel(ex.trustDelta)}
+                            color={deltaTone(ex.trustDelta)}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-
-              <div className="mb-2 flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-muted)]">
-                <span
-                  className="ui-mono uppercase tracking-[0.14em]"
-                  style={{ color: beliefDelta >= 0 ? "var(--success)" : "var(--danger)" }}
-                >
-                  {deltaLabel}
-                </span>
-                <span>Confidence {Math.round(state.confidence * 100)}%</span>
-              </div>
-
-              <div className="rounded-[14px] border border-white/6 bg-[rgba(8,11,18,0.42)] px-3 py-2.5 text-[12px] leading-5 text-[var(--text-secondary)]">
-                {summarizeReasoning(state.reasoning)}
-              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="space-y-5">
+          <div className="rounded-[24px] bg-[#f8fafc] px-5 py-4">
+            <div className="ui-mono mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#64748b]">Quiet tick</div>
+            <div className="text-[13px] leading-6 text-[#64748b]">
+              No direct claim exchanges this round. Agents updated beliefs independently.
             </div>
-          );
-        })}
-      </div>
-
-      {tickSnapshot.trust_updates.length > 0 && (
-        <div className="mt-4 border-t border-white/8 pt-4">
-          <div className="eyebrow mb-2">Trust updates</div>
-          <div className="space-y-2">
-            {tickSnapshot.trust_updates.map((update, index) => {
-              const from = agents.find((agent) => agent.id === update.from_agent_id);
-              const to = agents.find((agent) => agent.id === update.to_agent_id);
-              const delta = update.new_trust - update.old_trust;
-
-              return (
-                <div
-                  key={index}
-                  className="rounded-[14px] border border-white/8 bg-[rgba(255,255,255,0.02)] px-3 py-2.5 text-[12px] text-[var(--text-secondary)]"
-                >
-                  <span className="font-medium text-[var(--text-bright)]">
-                    {from?.name ?? update.from_agent_id}
-                  </span>
-                  <span className="mx-2 text-[var(--text-muted)]">to</span>
-                  <span className="font-medium text-[var(--text-bright)]">
-                    {to?.name ?? update.to_agent_id}
-                  </span>
-                  <span
-                    className="ui-mono ml-3 font-semibold uppercase tracking-[0.12em]"
-                    style={{ color: delta >= 0 ? "var(--success)" : "var(--danger)" }}
-                  >
-                    {delta >= 0 ? "+" : ""}
-                    {delta.toFixed(2)}
-                  </span>
-                  <span className="ml-2 text-[var(--text-muted)]">
-                    ({update.old_trust.toFixed(2)} to {update.new_trust.toFixed(2)})
-                  </span>
-                </div>
-              );
-            })}
           </div>
+
+          {fallbackMoments.map((moment) => {
+            const color = ARCHETYPE_COLORS[moment.archetype] ?? "#fff";
+            return (
+              <div key={moment.id} className="rounded-[22px] bg-[#f8fafc] px-5 py-4">
+                <div className="mb-3 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ background: color, boxShadow: `0 0 10px ${color}66` }}
+                    />
+                    <span className="text-[13px] font-semibold text-[#0f172a]">
+                      {moment.name}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <ImpactChip label={deltaLabel(moment.delta)} color={deltaTone(moment.delta)} />
+                    <span
+                      className="ui-mono text-[12px] font-semibold"
+                      style={{ color: beliefColor(moment.belief) }}
+                    >
+                      {Math.round(moment.belief * 100)}%
+                    </span>
+                  </div>
+                </div>
+                <div
+                  className="rounded-[14px] px-4 py-3 text-[var(--text-secondary)]"
+                  style={{ background: `${color}0a`, borderLeft: `2px solid ${color}33` }}
+                >
+                  <ExpandableLine text={moment.reasoning || "No spoken reaction captured."} collapsedChars={170} />
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
