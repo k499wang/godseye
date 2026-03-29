@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Literal
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Numeric, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -55,6 +55,9 @@ class PaperTrade(Base):
         ENUM("yes", "no", name="paper_side", create_type=False),
         index=True,
     )
+    wallet_address: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    signed_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    wallet_signature: Mapped[str | None] = mapped_column(Text, nullable=True)
     price: Mapped[Decimal] = mapped_column(Numeric(6, 5))
     shares: Mapped[Decimal] = mapped_column(Numeric(14, 5))
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))

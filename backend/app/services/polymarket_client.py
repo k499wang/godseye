@@ -252,6 +252,33 @@ class PolymarketClient:
                 return max(volume, Decimal("0"))
         return Decimal("0")
 
+    @staticmethod
+    def _coerce_bool(value: Any) -> bool | None:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"true", "1", "yes"}:
+                return True
+            if lowered in {"false", "0", "no"}:
+                return False
+        return None
+
+    def _event_looks_inactive_or_resolved(self, event: dict[str, Any]) -> bool:
+        for key in ("active",):
+            value = self._coerce_bool(event.get(key))
+            if value is False:
+                return True
+
+        for key in ("closed", "resolved", "archived", "inactive"):
+            value = self._coerce_bool(event.get(key))
+            if value is True:
+                return True
+
+        return False
+
     async def fetch_active_events(self, limit: int = 20) -> list[dict[str, Any]]:
         """
         Return a list of active Polymarket events sorted by volume, suitable
@@ -277,6 +304,8 @@ class PolymarketClient:
         results: list[dict[str, Any]] = []
         for event in raw_events:
             if not isinstance(event, dict):
+                continue
+            if self._event_looks_inactive_or_resolved(event):
                 continue
             slug = str(event.get("slug") or "").strip()
             title = str(event.get("title") or "").strip()

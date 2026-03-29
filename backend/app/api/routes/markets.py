@@ -22,6 +22,7 @@ router = APIRouter(prefix="/markets", tags=["markets"])
 # In-memory browse cache — avoids hammering Gamma API on every page load
 # ---------------------------------------------------------------------------
 _BROWSE_CACHE_TTL = 3600  # 1 hour
+_BROWSE_FETCH_LIMIT = 40
 
 _browse_cache: dict[str, object] = {
     "data": None,
@@ -58,7 +59,7 @@ async def import_market(
 
 async def _fetch_and_cache() -> list[dict[str, Any]]:
     """Fetch from Gamma API, geo-enrich, populate cache, return raw browse rows."""
-    raw = await polymarket_client.fetch_active_events(limit=80)
+    raw = await polymarket_client.fetch_active_events(limit=_BROWSE_FETCH_LIMIT)
     raw = await enrich_with_geo(raw)
     now = time.time()
     _browse_cache["data"] = raw

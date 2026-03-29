@@ -13,6 +13,9 @@ class PlacePaperOrderRequest(BaseModel):
     report_id: UUID | None = None
     side: PaperSide
     amount: float = Field(gt=0)
+    wallet_address: str = Field(min_length=1)
+    signed_message: str = Field(min_length=1)
+    wallet_signature: str = Field(min_length=1)
 
 
 class PaperTradeResponse(BaseModel):
@@ -23,6 +26,9 @@ class PaperTradeResponse(BaseModel):
     price: float = Field(gt=0, lt=1)
     shares: float = Field(gt=0)
     amount: float = Field(gt=0)
+    wallet_address: str | None = None
+    signed_message: str | None = None
+    wallet_signature: str | None = None
     created_at: datetime
 
 

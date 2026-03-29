@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { useWallet } from "@solana/wallet-adapter-react";
 import { placePaperOrder } from "@/lib/api";
 import type { PaperTradingResponse } from "@/lib/types";
 
@@ -32,6 +33,7 @@ export function PaperTradeDrawer({
   paperTrading,
   onSubmitted,
 }: PaperTradeDrawerProps) {
+  const { publicKey, connected, signMessage, wallet } = useWallet();
   const [side, setSide] = useState<"yes" | "no">(
     simulationProbability >= marketProbability ? "yes" : "no"
   );
@@ -73,6 +75,8 @@ export function PaperTradeDrawer({
     const delta = simulationProbability - marketProbability;
     return `${delta >= 0 ? "+" : ""}${Math.round(delta * 100)}pp`;
   }, [marketProbability, simulationProbability]);
+  const walletAddress = publicKey?.toBase58() ?? null;
+  const walletSupportsSigning = typeof signMessage === "function";
 
   if (!open) return null;
 
@@ -151,6 +155,28 @@ export function PaperTradeDrawer({
           </div>
 
           <div className="rounded-[24px] border border-white/10 bg-[rgba(255,255,255,0.03)] p-4">
+            <div className="eyebrow mb-3">Phantom approval</div>
+            <div className="rounded-[18px] border border-white/8 bg-[rgba(255,255,255,0.02)] px-4 py-4">
+              <div className="ui-mono text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                Wallet status
+              </div>
+              <div className="mt-2 text-sm text-[var(--text-secondary)]">
+                {connected && walletAddress
+                  ? `Connected to ${wallet?.adapter.name ?? "wallet"}: ${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`
+                  : "Connect Phantom from the globe header before placing a paper trade."}
+              </div>
+              {connected && !walletSupportsSigning && (
+                <div className="mt-3 text-sm text-[var(--danger)]">
+                  This wallet does not support message signing.
+                </div>
+              )}
+              <div className="mt-3 text-xs leading-5 text-[var(--text-muted)]">
+                Buying a paper position now requires a real Phantom message signature, but it still records only a mock trade in this app.
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[24px] border border-white/10 bg-[rgba(255,255,255,0.03)] p-4">
             <div className="eyebrow mb-3">Position size</div>
             <div className="mb-3 flex flex-wrap gap-2">
               {PRESET_AMOUNTS.map((amount) => (
@@ -192,22 +218,56 @@ export function PaperTradeDrawer({
               disabled={
                 mutation.isPending ||
                 sideLocked ||
+                !connected ||
+                !walletAddress ||
+                !walletSupportsSigning ||
                 !Number.isFinite(parsedAmount) ||
                 parsedAmount <= 0
               }
-              onClick={() => {
+              onClick={async () => {
                 setError(null);
-                mutation.mutate({
-                  market_id: marketId,
-                  simulation_id: simulationId,
-                  report_id: reportId,
-                  side,
-                  amount: parsedAmount,
-                });
+                if (!connected || !walletAddress || !walletSupportsSigning || !signMessage) {
+                  setError("Connect Phantom and allow message signing before placing a paper order.");
+                  return;
+                }
+
+                try {
+                  const signedMessage = [
+                    "GodSEye paper trade approval",
+                    `Market: ${marketId}`,
+                    reportId ? `Report: ${reportId}` : null,
+                    simulationId ? `Simulation: ${simulationId}` : null,
+                    `Side: ${side.toUpperCase()}`,
+                    `Amount: $${parsedAmount.toFixed(2)}`,
+                    `Market probability: ${formatPercent(marketProbability)}`,
+                    `Simulation probability: ${formatPercent(simulationProbability)}`,
+                    `Timestamp: ${new Date().toISOString()}`,
+                  ]
+                    .filter(Boolean)
+                    .join("\n");
+
+                  const encodedMessage = new TextEncoder().encode(signedMessage);
+                  const signature = await signMessage(encodedMessage);
+
+                  mutation.mutate({
+                    market_id: marketId,
+                    simulation_id: simulationId,
+                    report_id: reportId,
+                    side,
+                    amount: parsedAmount,
+                    wallet_address: walletAddress,
+                    signed_message: signedMessage,
+                    wallet_signature: toBase64(signature),
+                  });
+                } catch {
+                  setError("Phantom signature was rejected or could not be completed.");
+                }
               }}
               className="ui-mono mt-5 w-full rounded-full border border-[rgba(245,158,11,0.32)] bg-[rgba(245,158,11,0.1)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)] transition hover:bg-[rgba(245,158,11,0.16)] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {mutation.isPending ? "Placing paper order..." : `Buy ${side.toUpperCase()} paper position`}
+              {mutation.isPending
+                ? "Waiting for signature..."
+                : `Sign & buy ${side.toUpperCase()} paper position`}
             </button>
           </div>
 
@@ -227,6 +287,11 @@ export function PaperTradeDrawer({
                       <div className="mt-1 text-sm text-[var(--text-secondary)]">
                         {new Date(trade.created_at).toLocaleString()}
                       </div>
+                      {trade.wallet_address && (
+                        <div className="mt-1 text-xs text-[var(--text-muted)]">
+                          Signed by {trade.wallet_address.slice(0, 4)}...{trade.wallet_address.slice(-4)}
+                        </div>
+                      )}
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-semibold text-[var(--text-bright)]">
@@ -258,4 +323,12 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function formatPercent(value: number) {
   return `${Math.round(value * 100)}%`;
+}
+
+function toBase64(bytes: Uint8Array) {
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
 }

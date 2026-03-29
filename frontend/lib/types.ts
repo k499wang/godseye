@@ -150,6 +150,9 @@ export interface PlacePaperOrderRequest {
   report_id?: string | null;
   side: "yes" | "no";
   amount: number;
+  wallet_address: string;
+  signed_message: string;
+  wallet_signature: string;
 }
 
 export interface PaperTrade {
@@ -158,6 +161,9 @@ export interface PaperTrade {
   price: number;
   shares: number;
   amount: number;
+  wallet_address: string | null;
+  signed_message: string | null;
+  wallet_signature: string | null;
   created_at: string;
 }
 

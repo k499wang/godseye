@@ -137,6 +137,9 @@ async def place_paper_order(
         simulation_id=payload.simulation_id,
         report_id=payload.report_id,
         side=side,
+        wallet_address=payload.wallet_address,
+        signed_message=payload.signed_message,
+        wallet_signature=payload.wallet_signature,
         price=entry_price.quantize(PRICE_QUANT, rounding=ROUND_HALF_UP),
         shares=shares,
         amount=amount,
@@ -210,6 +213,9 @@ async def _build_response(
                 price=float(trade.price),
                 shares=float(trade.shares),
                 amount=float(trade.amount),
+                wallet_address=trade.wallet_address,
+                signed_message=trade.signed_message,
+                wallet_signature=trade.wallet_signature,
                 created_at=trade.created_at,
             )
             for trade in trades

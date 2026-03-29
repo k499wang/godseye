@@ -57,7 +57,7 @@ const AUTO_SPIN_RESUME_MS = 6000;
 
 export function GlobeProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<GlobeEvent[]>(GLOBE_EVENTS);
-  const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const realtimeRefreshTimerRef = useRef<number | null>(null);
 
   const applyBrowseSnapshot = useCallback((markets: Parameters<typeof browseItemToGlobeEvent>[0][]) => {
@@ -65,17 +65,28 @@ export function GlobeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadBrowseSnapshot = useCallback(async () => {
-    const res = await browseMarkets();
-    applyBrowseSnapshot(res.markets);
+    try {
+      const res = await browseMarkets();
+      applyBrowseSnapshot(res.markets);
+    } finally {
+      setIsLoadingEvents(false);
+    }
   }, [applyBrowseSnapshot]);
 
   useEffect(() => {
     let cancelled = false;
     browseMarkets()
       .then((res) => {
-        if (!cancelled) applyBrowseSnapshot(res.markets);
+        if (!cancelled) {
+          applyBrowseSnapshot(res.markets);
+          setIsLoadingEvents(false);
+        }
       })
-      .catch(() => {/* keep GLOBE_EVENTS fallback on failure */});
+      .catch(() => {
+        if (!cancelled) {
+          setIsLoadingEvents(false);
+        }
+      });
     return () => { cancelled = true; };
   }, [applyBrowseSnapshot]);
 
@@ -96,6 +107,7 @@ export function GlobeProvider({ children }: { children: ReactNode }) {
       if (realtimeRefreshTimerRef.current !== null) return;
       realtimeRefreshTimerRef.current = window.setTimeout(() => {
         realtimeRefreshTimerRef.current = null;
+        setIsLoadingEvents(true);
         void loadBrowseSnapshot().catch(() => undefined);
       }, 250);
     };

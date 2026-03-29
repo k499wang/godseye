@@ -30,6 +30,7 @@ export function GlobeHomePage({
   const router = useRouter();
   const {
     events,
+    isLoadingEvents,
     visibleIds,
     selectedEventId,
     setSelectedEventId,
@@ -363,12 +364,16 @@ export function GlobeHomePage({
                     style={{
                       padding: "7px 12px",
                       borderRadius: 999,
-                      background: "rgba(255,255,255,0.06)",
-                      border: "1px solid rgba(255,255,255,0.14)",
+                      background: isLoadingEvents ? "rgba(245,158,11,0.14)" : "rgba(255,255,255,0.06)",
+                      border: isLoadingEvents
+                        ? "1px solid rgba(245,158,11,0.32)"
+                        : "1px solid rgba(255,255,255,0.14)",
                       backdropFilter: "blur(8px)",
+                      color: isLoadingEvents ? "var(--accent)" : "var(--text-primary)",
                     }}
                   >
-                    <span style={{ color: "var(--success)" }}>●</span> Live
+                    <span style={{ color: isLoadingEvents ? "var(--accent)" : "var(--success)" }}>●</span>{" "}
+                    {isLoadingEvents ? "Syncing live markets" : "Live"}
                   </span>
                   <span
                     style={{
