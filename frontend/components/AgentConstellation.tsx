@@ -127,6 +127,15 @@ export function AgentConstellation({
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(1240);
   const animationFrameRef = useRef<number | null>(null);
+  const previousLayoutRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const transitionRef = useRef<{
+    from: Map<string, { x: number; y: number }>;
+    to: Map<string, { x: number; y: number }>;
+  }>({
+    from: new Map(),
+    to: new Map(),
+  });
+  const [transitionProgress, setTransitionProgress] = useState(1);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -181,6 +190,7 @@ export function AgentConstellation({
   const layout = useMemo(() => {
     const nodes: GraphNode[] = agents.map((agent) => {
       const state = stateById.get(agent.id);
+      const previousLayout = previousLayoutRef.current.get(agent.id);
       const belief = state?.belief ?? agent.initial_belief;
       const confidence = state?.confidence ?? agent.confidence;
       const orbit = 180 + belief * 240 + seededUnit(`${agent.id}-orbit`) * 120;
@@ -202,8 +212,8 @@ export function AgentConstellation({
           activeShares.some((share) => share.from_agent_id === agent.id || share.to_agent_id === agent.id),
         targetX,
         targetY,
-        x: targetX,
-        y: targetY,
+        x: previousLayout?.x ?? targetX,
+        y: previousLayout?.y ?? targetY,
       };
     });
 
@@ -301,62 +311,29 @@ export function AgentConstellation({
     return { nodes, links };
   }, [activeShares, agents, selectedAgentId, snapshots, stateById]);
 
-  const [animatedNodes, setAnimatedNodes] = useState<GraphNode[]>(layout.nodes);
-
-  useEffect(() => {
-    setAnimatedNodes((previousNodes) => {
-      if (previousNodes.length === 0) return layout.nodes;
-
-      const previousById = new Map(previousNodes.map((node) => [node.id, node]));
-      return layout.nodes.map((node) => {
-        const previous = previousById.get(node.id);
-        return previous
-          ? {
-              ...node,
-              x: previous.x ?? node.x,
-              y: previous.y ?? node.y,
-            }
-          : node;
-      });
-    });
-  }, [layout.nodes]);
-
   useEffect(() => {
     if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
 
-    const previousById = new Map(animatedNodes.map((node) => [node.id, node]));
-    const targets = layout.nodes.map((node) => {
-      const previous = previousById.get(node.id);
-      return {
-        id: node.id,
-        fromX: previous?.x ?? node.x ?? node.targetX,
-        fromY: previous?.y ?? node.y ?? node.targetY,
-        toX: node.x ?? node.targetX,
-        toY: node.y ?? node.targetY,
-      };
-    });
+    const to = new Map(
+      layout.nodes.map((node) => [node.id, { x: node.x ?? node.targetX, y: node.y ?? node.targetY }])
+    );
+    const from =
+      previousLayoutRef.current.size > 0 ? new Map(previousLayoutRef.current) : new Map(to);
+
+    transitionRef.current = { from, to };
+    setTransitionProgress(0);
 
     const start = performance.now();
 
     const animate = (now: number) => {
       const progress = Math.min(1, (now - start) / TICK_MOTION_MS);
       const eased = easeInOutCubic(progress);
-
-      setAnimatedNodes(
-        layout.nodes.map((node) => {
-          const target = targets.find((entry) => entry.id === node.id);
-          if (!target) return node;
-          return {
-            ...node,
-            x: target.fromX + (target.toX - target.fromX) * eased,
-            y: target.fromY + (target.toY - target.fromY) * eased,
-          };
-        })
-      );
+      setTransitionProgress(eased);
 
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(animate);
       } else {
+        previousLayoutRef.current = new Map(to);
         animationFrameRef.current = null;
       }
     };
@@ -370,6 +347,19 @@ export function AgentConstellation({
       }
     };
   }, [layout.nodes]);
+
+  const animatedNodes = useMemo(() => {
+    const { from, to } = transitionRef.current;
+    return layout.nodes.map((node) => {
+      const fromPoint = from.get(node.id) ?? { x: node.x ?? node.targetX, y: node.y ?? node.targetY };
+      const toPoint = to.get(node.id) ?? { x: node.x ?? node.targetX, y: node.y ?? node.targetY };
+      return {
+        ...node,
+        x: fromPoint.x + (toPoint.x - fromPoint.x) * transitionProgress,
+        y: fromPoint.y + (toPoint.y - fromPoint.y) * transitionProgress,
+      };
+    });
+  }, [layout.nodes, transitionProgress]);
 
   const renderedLinks = useMemo(
     () =>
