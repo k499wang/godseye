@@ -29,6 +29,11 @@ class MarketBrowseItem(BaseModel):
     lat: float = 0.0
     lng: float = 0.0
     region: str = "Global"
+    is_imported: bool = False
+    market_id: UUID | None = None
+    session_id: UUID | None = None
+    simulation_id: UUID | None = None
+    simulation_status: str | None = None
 
 
 class MarketBrowseResponse(BaseModel):

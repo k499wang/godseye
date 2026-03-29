@@ -1,13 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useGlobe } from "./GlobeContext";
 import { CATEGORY_COLOR } from "@/lib/globeData";
+import { buildWorld, importMarket, startSimulation } from "@/lib/api";
 
 export function EventPanel() {
-  const { events, selectedEventId, setSelectedEventId, setGlobeFocusTarget, stopAutoSpin } = useGlobe();
+  const {
+    events,
+    selectedEventId,
+    setSelectedEventId,
+    setGlobeFocusTarget,
+    stopAutoSpin,
+    refreshEvents,
+  } = useGlobe();
   const router = useRouter();
+  const [isActionPending, setIsActionPending] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const event = events.find((entry) => entry.id === selectedEventId) ?? null;
   const isOpen = !!selectedEventId;
@@ -27,6 +37,54 @@ export function EventPanel() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [close]);
+
+  useEffect(() => {
+    setActionError(null);
+    setIsActionPending(false);
+  }, [selectedEventId]);
+
+  const primaryActionLabel = useMemo(() => {
+    if (!event) return "";
+    if (event.simulationId) return "Open simulation";
+    if (event.sessionId) return "Start simulation";
+    return "Import and start simulation";
+  }, [event]);
+
+  const handlePrimaryAction = useCallback(async () => {
+    if (!event || isActionPending) return;
+
+    if (event.simulationId) {
+      stopAutoSpin();
+      router.push(`/simulation/${event.simulationId}?event=${encodeURIComponent(event.id)}`);
+      return;
+    }
+
+    setActionError(null);
+    setIsActionPending(true);
+
+    try {
+      let sessionId = event.sessionId;
+
+      if (!sessionId) {
+        const imported = await importMarket(event.marketUrl);
+        sessionId = imported.session_id;
+      }
+
+      const builtSimulation = await buildWorld(sessionId);
+      const activeSimulation =
+        builtSimulation.status === "running" || builtSimulation.status === "complete"
+          ? builtSimulation
+          : await startSimulation(builtSimulation.id);
+
+      await refreshEvents();
+      stopAutoSpin();
+      router.push(`/simulation/${activeSimulation.id}?event=${encodeURIComponent(event.id)}`);
+    } catch {
+      setActionError("Could not start the simulation for this market.");
+    } finally {
+      setIsActionPending(false);
+    }
+  }, [event, isActionPending, refreshEvents, router, stopAutoSpin]);
 
   return (
     <div
@@ -290,39 +348,56 @@ export function EventPanel() {
               <div style={{ height: 1, background: "rgba(255,255,255,0.08)" }} />
 
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {event.simulationId ? (
+                <button
+                  onClick={handlePrimaryAction}
+                  disabled={isActionPending}
+                  style={{
+                    ...primaryButton,
+                    borderColor: `${color}66`,
+                    color,
+                    background: `${color}12`,
+                    opacity: isActionPending ? 0.7 : 1,
+                    cursor: isActionPending ? "wait" : "pointer",
+                  }}
+                >
+                  {isActionPending ? "Launching simulation..." : primaryActionLabel}
+                </button>
+
+                {event.simulationId ? (
                   <>
-                    <button
-                      onClick={() => {
-                        stopAutoSpin();
-                        router.push(
-                          `/simulation/${event.simulationId}?event=${encodeURIComponent(event.id)}`
-                        );
-                      }}
-                      style={{
-                        ...primaryButton,
-                        borderColor: `${color}66`,
-                        color,
-                        background: `${color}12`,
-                      }}
-                    >
-                      Open simulation
-                    </button>
-                    <button
-                      onClick={() => {
-                        stopAutoSpin();
-                        router.push(
-                          `/reports/${event.simulationId}?event=${encodeURIComponent(event.id)}`
-                        );
-                      }}
-                      style={secondaryButton}
-                    >
-                      View report
-                    </button>
+                    {event.simulationStatus === "complete" && (
+                      <button
+                        onClick={() => {
+                          stopAutoSpin();
+                          router.push(
+                            `/reports/${event.simulationId}?event=${encodeURIComponent(event.id)}`
+                          );
+                        }}
+                        style={secondaryButton}
+                      >
+                        View report
+                      </button>
+                    )}
                   </>
                 ) : (
                   <p className="ui-mono" style={{ fontSize: 12, letterSpacing: "0.14em", color: "var(--text-muted)", margin: 0, textTransform: "uppercase" }}>
-                    No simulation linked. Import this market to begin.
+                    {event.isImported
+                      ? "Imported and ready. Start a simulation for this market."
+                      : "Live Polymarket market. Import it to start a simulation."}
+                  </p>
+                )}
+
+                {actionError && (
+                  <p
+                    className="ui-mono"
+                    style={{
+                      fontSize: 12,
+                      letterSpacing: "0.08em",
+                      color: "var(--danger)",
+                      margin: 0,
+                    }}
+                  >
+                    {actionError}
                   </p>
                 )}
               </div>
