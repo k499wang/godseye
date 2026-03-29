@@ -196,6 +196,11 @@ export function GlobeHomePage({
     router.replace("/?mode=explore", { scroll: false });
   }, [router, setGlobeFocusTarget, setSelectedEventId]);
 
+  const handleClearActiveEvent = useCallback(() => {
+    setSelectedEventId(null);
+    setGlobeFocusTarget(null);
+  }, [setGlobeFocusTarget, setSelectedEventId]);
+
   const handleEventSelect = useCallback(
     (event: GlobeEvent) => {
       setSelectedEventId(event.id);
@@ -258,6 +263,7 @@ export function GlobeHomePage({
           visibleIds={visibleIds}
           activeEvent={activeEvent}
           onEventSelect={handleEventSelect}
+          onBackgroundClick={handleClearActiveEvent}
           showCountryBorders={showCountryBorders}
           onFlyComplete={() => undefined}
           onInteraction={stopAutoSpin}

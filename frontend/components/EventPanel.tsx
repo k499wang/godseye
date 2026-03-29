@@ -6,7 +6,7 @@ import { useGlobe } from "./GlobeContext";
 import { CATEGORY_COLOR } from "@/lib/globeData";
 
 export function EventPanel() {
-  const { events, selectedEventId, setSelectedEventId, stopAutoSpin } = useGlobe();
+  const { events, selectedEventId, setSelectedEventId, setGlobeFocusTarget, stopAutoSpin } = useGlobe();
   const router = useRouter();
 
   const event = events.find((entry) => entry.id === selectedEventId) ?? null;
@@ -14,7 +14,10 @@ export function EventPanel() {
   const color = event ? CATEGORY_COLOR[event.category] : "#f59e0b";
   const confidence = event?.confidence_score ?? 0.5;
 
-  const close = useCallback(() => setSelectedEventId(null), [setSelectedEventId]);
+  const close = useCallback(() => {
+    setSelectedEventId(null);
+    setGlobeFocusTarget(null);
+  }, [setGlobeFocusTarget, setSelectedEventId]);
 
   useEffect(() => {
     const handler = (eventKey: KeyboardEvent) => {
