@@ -240,13 +240,37 @@ export default function ReportPage({
             />
 
             <div className="relative">
-              <div className="eyebrow mb-4 text-[var(--accent)]">Market briefing</div>
-              <h1 className="max-w-4xl text-4xl font-semibold leading-tight tracking-[-0.04em] text-[var(--text-bright)] sm:text-5xl">
+              <div className="eyebrow mb-4 text-[var(--accent)]">Market</div>
+              <h1 className="text-4xl font-bold tracking-tight text-[var(--text-bright)]">
                 {marketQuestion}
               </h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-[var(--text-secondary)]">
-                {reportLead}
-              </p>
+
+              <div className="mt-5 flex flex-wrap items-center gap-2">
+                <span className="ui-mono border border-white/12 bg-white/4 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                  mkt
+                </span>
+                <span className="text-lg font-semibold text-[#93c5fd]">{formatPercent(report.market_probability)}</span>
+                <span className="text-[var(--text-subtle)]">/</span>
+                <span className="ui-mono border border-white/12 bg-white/4 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                  sim
+                </span>
+                <span
+                  className="text-lg font-semibold"
+                  style={{ color: probDelta >= 0 ? "var(--success)" : "var(--danger)" }}
+                >
+                  {formatPercent(report.simulation_probability)}
+                </span>
+                <span className="text-[var(--text-subtle)]">/</span>
+                <span className="ui-mono border border-white/12 bg-white/4 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                  spr
+                </span>
+                <span
+                  className="text-lg font-semibold"
+                  style={{ color: probDelta >= 0 ? "var(--success)" : "var(--danger)" }}
+                >
+                  {deltaLabel}
+                </span>
+              </div>
 
               <div className="mt-5 flex flex-wrap gap-3">
                 <Pill>{marketLabel}</Pill>
@@ -255,49 +279,34 @@ export default function ReportPage({
                 {isMock && <Pill>Vol ${formatVolume(MOCK_MARKET.volume)}</Pill>}
               </div>
 
-              <div className="mt-8 border-l border-white/16 pl-4">
-                <div className="eyebrow mb-3">Story</div>
-                <ol className="space-y-2.5">
-                  {storyBeats.map((beat, index) => (
-                    <li key={`${beat}-${index}`} className="flex items-start gap-3 text-sm leading-6 text-[var(--text-secondary)]">
-                      <span className="ui-mono inline-block w-5 text-[10px] font-semibold text-[var(--text-muted)]">
-                        {index + 1}.
-                      </span>
-                      <span>{`Beat ${index + 1}: ${toFragment(beat, 84)}`}</span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
+              {/* Remove story beats for conciseness */}
             </div>
           </div>
 
             <aside className="border-l border-white/14 pl-6">
               <div className="space-y-4">
-                <div>
-                  <div className="eyebrow mb-2">Snapshot</div>
-                  <div className="space-y-1.5 text-sm text-[var(--text-secondary)]">
-                    <div>
-                      Market: <span className="text-[var(--text-bright)]">{formatPercent(report.market_probability)}</span>
-                    </div>
-                    <div>
-                      Simulation: <span className="text-[var(--text-bright)]">{formatPercent(report.simulation_probability)}</span>
-                    </div>
-                    <div>
-                      Spread: <span className="text-[var(--text-bright)]">{deltaLabel}</span>
-                    </div>
-                    <div>
-                      Stance: <span className="text-[var(--text-bright)]">{simulationTone}</span>
-                    </div>
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2 items-center">
+                    <span className="ui-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">MKT</span>
+                    <span className="text-lg font-bold text-[#93c5fd]">{formatPercent(report.market_probability)}</span>
+                    <span className="ui-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">SIM</span>
+                    <span className="text-lg font-bold" style={{ color: probDelta >= 0 ? "var(--success)" : "var(--danger)" }}>{formatPercent(report.simulation_probability)}</span>
+                    <span className="ui-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">Δ</span>
+                    <span className="text-lg font-bold" style={{ color: probDelta >= 0 ? "var(--success)" : "var(--danger)" }}>{deltaLabel}</span>
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <MiniProbabilityRail label="Market" value={report.market_probability} color="#93c5fd" />
-                  <MiniProbabilityRail
-                    label="Simulation"
-                    value={report.simulation_probability}
-                    color={probDelta >= 0 ? "#34d399" : "#fb7185"}
-                  />
+                  <div className="flex gap-2 items-center">
+                    <Pill>{signalTone}</Pill>
+                    <Pill tone={probDelta >= 0 ? "success" : "danger"}>{deltaTone}</Pill>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <MiniProbabilityRail label="M" value={report.market_probability} color="#93c5fd" />
+                    <MiniProbabilityRail label="S" value={report.simulation_probability} color={probDelta >= 0 ? "#34d399" : "#fb7185"} />
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <span className="ui-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">Stance</span>
+                    <span className="font-bold text-[var(--text-bright)]">{simulationTone}</span>
+                  </div>
+                  {isMock && <Pill>Vol ${formatVolume(MOCK_MARKET.volume)}</Pill>}
                 </div>
 
                 <div className="pt-2">
@@ -331,71 +340,24 @@ export default function ReportPage({
             </aside>
           </section>
 
-          <section className="grid gap-10 border-y border-white/10 py-8 lg:grid-cols-[1.2fr_0.8fr]">
-            <div>
-              <div className="eyebrow mb-3">Recommendation</div>
-              <div className="text-lg font-semibold tracking-tight text-[var(--text-bright)]">
-                {`Call: ${toFragment(recommendationBeat, 96)}`}
-              </div>
-
-              <div className="mt-8">
-                <div className="eyebrow mb-3">Top drivers</div>
-                <ul className="space-y-2.5 text-sm leading-6 text-[var(--text-secondary)]">
-                  {report.key_drivers.slice(0, 4).map((driver, index) => (
-                    <li key={`${driver}-${index}`} className="flex items-start gap-3 border-l border-white/14 pl-3">
-                      <span className="ui-mono inline-block w-6 text-[10px] text-[var(--text-muted)]">{index + 1}.</span>
-                      <span>{`D${index + 1}: ${toFragment(driver, 86)}`}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+          <section className="flex flex-col gap-8 border-y border-white/10 py-8">
+            <div className="flex gap-4 items-center">
+              <span className="eyebrow">Call</span>
+              <Pill tone={probDelta >= 0 ? "success" : "danger"}>{probDelta >= 0 ? "YES" : "NO"}</Pill>
+              <span className="ui-mono text-lg font-bold text-[var(--accent)]">{formatPercent(report.simulation_probability)}</span>
+              <span className="ui-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">Δ</span>
+              <span className="text-lg font-bold" style={{ color: probDelta >= 0 ? "var(--success)" : "var(--danger)" }}>{deltaLabel}</span>
             </div>
-
-            <div className="border-l border-white/14 pl-6">
-              <div className="eyebrow mb-3">Signal quality</div>
-              <div className="space-y-2 text-sm leading-6 text-[var(--text-secondary)]">
-                <div>{`Gap: ${absDelta >= 0.1 ? "large" : "small"}`}</div>
-                <div>{`Read: ${absDelta >= 0.1 ? "mispricing setup" : "timing edge"}`}</div>
-                <div>Risk: catalyst + liquidity</div>
-              </div>
-
-              <div className="mt-7 space-y-5">
-                <div>
-                  <div className="eyebrow mb-2">Faction</div>
-                  <ul className="space-y-2 text-sm leading-6 text-[var(--text-secondary)]">
-                    {factionBeats.slice(0, 2).map((beat, index) => (
-                      <li key={`${beat}-${index}`} className="border-l border-white/14 pl-3">
-                        {`F${index + 1}: ${toFragment(beat, 74)}`}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <div className="eyebrow mb-2">Trust</div>
-                  <ul className="space-y-2 text-sm leading-6 text-[var(--text-secondary)]">
-                    {trustBeats.slice(0, 2).map((beat, index) => (
-                      <li key={`${beat}-${index}`} className="border-l border-white/14 pl-3">
-                        {`T${index + 1}: ${toFragment(beat, 74)}`}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
+            {/* Remove drivers, faction, trust, and signal quality text blocks for brevity */}
           </section>
 
-          <footer className="flex flex-col gap-4 border-t border-white/8 pt-6 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="eyebrow mb-1">Report trace</div>
-              <div className="text-sm text-[var(--text-secondary)]">
-                Report {report.id.slice(0, 8).toUpperCase()} • Sim {report.simulation_id.slice(0, 8).toUpperCase()}.
-              </div>
-            </div>
+          <footer className="flex flex-row gap-4 border-t border-white/8 pt-6 items-center justify-between">
+            <span className="ui-mono text-xs text-[var(--text-muted)]" title="Simulation/report ID">ID: {report.id.slice(0, 8).toUpperCase()}</span>
             <button
               onClick={() => router.push(simulationHref)}
               className="ui-mono border border-white/12 px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
             >
-              Return to replay
+              Replay
             </button>
           </footer>
           <div className="h-12 sm:h-20" aria-hidden="true" />
@@ -749,31 +711,33 @@ function probabilityTone(value: number): "success" | "danger" | "warning" {
   return "warning";
 }
 
-function toFragment(text: string, maxLength = 88): string {
-  return oneLine(text, maxLength).replace(/[.!?]+$/g, "");
+function toFragment(text: string): string {
+  // Show full text, just normalize whitespace and remove trailing punctuation
+  return text.replace(/\s+/g, " ").trim().replace(/[.!?]+$/g, "");
 }
 
-function oneLine(text: string, maxLength = 160): string {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxLength) return normalized;
-  return `${normalized.slice(0, maxLength - 1).trim()}...`;
+function oneLine(text: string): string {
+  // Show full text, just normalize whitespace
+  return text.replace(/\s+/g, " ").trim();
 }
 
 function splitIntoBeats(text: string, maxItems: number): string[] {
+  // Split into sentences, but do not truncate each line
   const raw = text
     .split(/(?<=[.!?])\s+/)
-    .map((line) => oneLine(line, 140))
+    .map((line) => oneLine(line))
     .filter(Boolean);
 
   if (raw.length >= maxItems) {
     return raw.slice(0, maxItems);
   }
 
-  return [oneLine(text, 140)];
+  return [oneLine(text)];
 }
 
 function toStoryBeats(summary: string, drivers: string[], maxItems: number): string[] {
-  const beats = [oneLine(summary, 135), ...drivers.map((driver) => oneLine(driver, 120))]
+  // Do not truncate summary or drivers
+  const beats = [oneLine(summary), ...drivers.map((driver) => oneLine(driver))]
     .filter(Boolean)
     .slice(0, maxItems);
 
