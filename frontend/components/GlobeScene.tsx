@@ -96,7 +96,10 @@ function MarkerContent({
     <div
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
-      onClick={() => onSelect(event)}
+      onClick={(domEvent) => {
+        domEvent.stopPropagation();
+        onSelect(event);
+      }}
       style={{
         position: "relative",
         width: size,
@@ -541,6 +544,7 @@ export default function GlobeScene({
   visibleIds,
   activeEvent,
   onEventSelect,
+  onBackgroundClick,
   showCountryBorders,
   onFlyComplete,
   onInteraction,
@@ -551,6 +555,7 @@ export default function GlobeScene({
   visibleIds: Set<string>;
   activeEvent: GlobeEvent | null;
   onEventSelect: (e: GlobeEvent) => void;
+  onBackgroundClick: () => void;
   showCountryBorders: boolean;
   onFlyComplete: () => void;
   onInteraction: () => void;
@@ -562,6 +567,9 @@ export default function GlobeScene({
       camera={{ position: [0, 0.4, 3.2], fov: 42, near: 0.1, far: 1000 }}
       style={{ background: "transparent" }}
       gl={{ antialias: true, alpha: true }}
+      onPointerMissed={() => {
+        if (activeEvent) onBackgroundClick();
+      }}
     >
       <Scene
         events={events}

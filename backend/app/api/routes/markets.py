@@ -53,7 +53,7 @@ async def import_market(
 
 async def _fetch_and_cache() -> MarketBrowseResponse:
     """Fetch from Gamma API, geo-enrich via Gemini, populate cache, return response."""
-    raw = await polymarket_client.fetch_active_events(limit=80)
+    raw = await polymarket_client.fetch_active_events(limit=70)
     raw = await enrich_with_geo(raw)
     items: list[MarketBrowseItem] = []
     for market in raw:
