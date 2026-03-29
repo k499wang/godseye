@@ -62,8 +62,7 @@ export default function SimulationPage({
     (isLoading ||
       !simulation ||
       simulation.status === "pending" ||
-      simulation.status === "building" ||
-      (simulation.status === "running" && simulation.tick_data.length === 0));
+      (simulation.status === "building" && simulation.agents.length === 0));
 
   if (showLoadingState) {
     return (

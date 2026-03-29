@@ -340,12 +340,20 @@ class SimulationRunner:
             f"Keep commentary even tighter: 1 short sentence max.\n\n"
             f"On each round, choose exactly ONE action:\n"
             f"1. update_belief — Revise your probability and confidence.\n"
-            f"2. share_claim — Forward one claim to 1-2 trusted peers.\n\n"
+            f"2. share_claim — Forward one claim to 1-4 trusted peers.\n\n"
+            f"IMPORTANT: Good forecasters actively share evidence. You should share claims "
+            f"roughly 40-60% of the time — especially when you see a strong or novel claim "
+            f"that your peers might not have seen, or when someone shares something with you "
+            f"that deserves to be passed along. Hoarding information is bad forecasting. "
+            f"If you received claims this round, seriously consider forwarding the most "
+            f"impactful one to a trusted peer.\n"
+            f"When sharing, send to MULTIPLE peers (2-4 agents) — the more people who see "
+            f"important evidence, the better the group forecast becomes. Don't just send to one person.\n\n"
             f"Return ONLY valid JSON matching one of these shapes:\n"
             f'{{"action":"update_belief","new_probability":<float 0-1>,'
             f'"confidence":<float 0-1>,"reasoning":"<text>"}}\n'
             f'{{"action":"share_claim","claim_id":"<id>",'
-            f'"target_agent_ids":["<id>"],"commentary":"<text>","reasoning":"<text>"}}'
+            f'"target_agent_ids":["<id>","<id>",...],"commentary":"<text>","reasoning":"<text>"}}'
         )
 
         parts: list[str] = [
@@ -391,7 +399,10 @@ class SimulationRunner:
         parts.append(
             "Choose one action. If you share a claim, the claim_id MUST be from the "
             "visible or incoming claims above. target_agent_ids must be from the "
-            "trusted agents list. Explain yourself briefly and with personality. Return ONLY valid JSON."
+            "trusted agents list — include 2-4 agents to spread evidence widely. "
+            "Explain yourself briefly and with personality. "
+            "Remember: sharing strong evidence with multiple peers is just as valuable as updating your own belief. "
+            "Return ONLY valid JSON."
         )
 
         return system_prompt, "\n".join(parts)
@@ -458,15 +469,23 @@ class SimulationRunner:
         incoming_claims: list[_PendingShare],
         all_agents: list[AgentRecord],
     ) -> bool:
-        claim_id = str(action.get("claim_id", ""))
+        claim_id = str(action.get("claim_id", "")).strip()
         target_ids = action.get("target_agent_ids", [])
 
-        valid_claim_ids = {c.id for c in visible_claims} | {ic.claim_id for ic in incoming_claims}
+        valid_claim_ids = {str(c.id).strip() for c in visible_claims} | {str(ic.claim_id).strip() for ic in incoming_claims}
         if claim_id not in valid_claim_ids:
+            logger.warning(
+                "Agent %s share_claim rejected: claim_id %s not in %d valid claims",
+                agent.name, claim_id, len(valid_claim_ids),
+            )
             return False
 
-        valid_agent_ids = {a.id for a in all_agents if a.id != agent.id}
-        if not target_ids or any(str(tid) not in valid_agent_ids for tid in target_ids):
+        valid_agent_ids = {str(a.id).strip() for a in all_agents if a.id != agent.id}
+        if not target_ids or any(str(tid).strip() not in valid_agent_ids for tid in target_ids):
+            logger.warning(
+                "Agent %s share_claim rejected: invalid target_agent_ids %s",
+                agent.name, target_ids,
+            )
             return False
 
         return True

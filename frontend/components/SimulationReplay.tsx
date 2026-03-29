@@ -204,6 +204,7 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
         currentTick={currentTick}
         selectedAgentId={selectedAgentId}
         onSelectAgent={setSelectedAgentId}
+        simulationId={simulation.id}
       />
 
       {selectedAgent && selectedAgentState && (

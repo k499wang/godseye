@@ -12,11 +12,13 @@ from sqlalchemy.orm import selectinload
 from app.core.database import SessionLocal, get_db
 from app.models.agent import Agent
 from app.models.claim import Claim
+from app.models.claim_share import ClaimShare
 from app.models.market import Market
 from app.models.session import AnalysisSession
 from app.models.simulation import Simulation
 from app.schemas.simulation import (
     AgentSummary,
+    ClaimShareRecord,
     ProfessionalBackground,
     SimulationResponse,
     TickSnapshot,
@@ -175,6 +177,9 @@ async def _find_latest_simulation(
         select(Simulation)
         .options(
             selectinload(Simulation.agents),
+            selectinload(Simulation.claim_shares).selectinload(ClaimShare.from_agent),
+            selectinload(Simulation.claim_shares).selectinload(ClaimShare.to_agent),
+            selectinload(Simulation.claim_shares).selectinload(ClaimShare.claim),
             selectinload(Simulation.market),
         )
         .where(Simulation.session_id == session_id)
@@ -192,6 +197,9 @@ async def _load_simulation(
         select(Simulation)
         .options(
             selectinload(Simulation.agents),
+            selectinload(Simulation.claim_shares).selectinload(ClaimShare.from_agent),
+            selectinload(Simulation.claim_shares).selectinload(ClaimShare.to_agent),
+            selectinload(Simulation.claim_shares).selectinload(ClaimShare.claim),
             selectinload(Simulation.market),
         )
         .where(Simulation.id == simulation_id)
@@ -213,6 +221,43 @@ async def _load_claim_rows(
 
 
 def _to_simulation_response(simulation: Simulation) -> SimulationResponse:
+    tick_data = [
+        TickSnapshot.model_validate(snapshot)
+        for snapshot in (simulation.tick_data or [])
+    ]
+    tick_by_number = {snapshot.tick: snapshot for snapshot in tick_data}
+
+    for share in sorted(
+        simulation.claim_shares,
+        key=lambda row: (row.tick_number, row.created_at, row.id),
+    ):
+        tick_snapshot = tick_by_number.get(share.tick_number)
+        if tick_snapshot is None:
+            continue
+
+        share_exists = any(
+            existing.from_agent_id == share.from_agent_id
+            and existing.to_agent_id == share.to_agent_id
+            and existing.claim_id == share.claim_id
+            and existing.tick == share.tick_number
+            for existing in tick_snapshot.claim_shares
+        )
+        if share_exists:
+            continue
+
+        tick_snapshot.claim_shares.append(
+            ClaimShareRecord(
+                from_agent_id=share.from_agent_id,
+                from_agent_name=share.from_agent.name,
+                to_agent_id=share.to_agent_id,
+                to_agent_name=share.to_agent.name,
+                claim_id=share.claim_id,
+                claim_text=share.claim.text,
+                commentary=share.commentary,
+                tick=share.tick_number,
+            )
+        )
+
     return SimulationResponse(
         id=simulation.id,
         session_id=simulation.session_id,
@@ -234,10 +279,7 @@ def _to_simulation_response(simulation: Simulation) -> SimulationResponse:
             )
             for agent in simulation.agents
         ],
-        tick_data=[
-            TickSnapshot.model_validate(snapshot)
-            for snapshot in (simulation.tick_data or [])
-        ],
+        tick_data=tick_data,
         created_at=simulation.created_at,
         completed_at=simulation.completed_at,
     )
