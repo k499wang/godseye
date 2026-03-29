@@ -309,6 +309,7 @@ async def _persist_tick(
     try:
         from sqlalchemy import select
         from app.models.agent import Agent
+        from app.models.claim import Claim as ClaimModel
         from app.models.claim_share import ClaimShare
         from app.models.simulation import Simulation
 
@@ -337,6 +338,13 @@ async def _persist_tick(
                 )
             )
         ).scalars().all()
+        share_claim_ids = {UUID(cs.claim_id) for cs in snapshot.claim_shares}
+        existing_claims = (
+            await db.execute(
+                select(ClaimModel).where(ClaimModel.id.in_(share_claim_ids))
+            )
+        ).scalars().all() if share_claim_ids else []
+        existing_claim_ids = {claim.id for claim in existing_claims}
         existing_share_keys = {
             (
                 str(share.from_agent_id),
@@ -352,11 +360,23 @@ async def _persist_tick(
             if share_key in existing_share_keys:
                 continue
             try:
+                claim_uuid = UUID(cs.claim_id)
+                if claim_uuid not in existing_claim_ids:
+                    db.add(ClaimModel(
+                        id=claim_uuid,
+                        session_id=sim.session_id,
+                        market_id=sim.market_id,
+                        text=cs.claim_text,
+                        stance=cs.claim_stance,
+                        strength_score=cs.claim_strength_score,
+                        novelty_score=cs.claim_novelty_score,
+                    ))
+                    existing_claim_ids.add(claim_uuid)
                 db.add(ClaimShare(
                     simulation_id=UUID(simulation_id),
                     from_agent_id=UUID(cs.from_agent_id),
                     to_agent_id=UUID(cs.to_agent_id),
-                    claim_id=UUID(cs.claim_id),
+                    claim_id=claim_uuid,
                     commentary=cs.commentary,
                     tick_number=cs.tick,
                     delivered=True,

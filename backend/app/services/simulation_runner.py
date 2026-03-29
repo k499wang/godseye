@@ -68,6 +68,9 @@ class _PendingShare:
     to_agent_name: str = ""
     claim_id: str = ""
     claim_text: str = ""
+    claim_stance: Literal["yes", "no"] = "yes"
+    claim_strength_score: float = 0.5
+    claim_novelty_score: float = 0.5
     commentary: str = ""
     tick: int = 0
     delivered: bool = False
@@ -176,11 +179,11 @@ class SimulationRunner:
 
         claims_by_id: dict[str, Claim] = {c.id: c for c in claims}
         all_claim_shares: list[_PendingShare] = []
-        visible_claims = self._select_visible_claims(claims)
         tick_data: list[TickSnapshot] = []
 
         for tick_num in range(1, total_ticks + 1):
             logger.info("Simulation %s — tick %d/%d", simulation_id, tick_num, total_ticks)
+            visible_claims = self._select_visible_claims(list(claims_by_id.values()))
 
             # 1. Incoming claims per agent (shares from previous tick)
             incoming_by_agent: dict[str, list[_PendingShare]] = {
@@ -223,8 +226,20 @@ class SimulationRunner:
                     action, agent, visible_claims,
                     incoming_by_agent.get(agent.id, []), agents,
                 ):
+                    shared_claim = self._resolve_share_claim(
+                        action=action,
+                        agent=agent,
+                        visible_claims=visible_claims,
+                        incoming_claims=incoming_by_agent.get(agent.id, []),
+                        claims_by_id=claims_by_id,
+                    )
+                    if shared_claim is None:
+                        state = self._apply_belief_update(agent, action)
+                        tick_agent_states.append(state)
+                        continue
+                    claims_by_id[shared_claim.id] = shared_claim
                     new_shares = self._create_claim_shares(
-                        agent, action, agents, claims_by_id,
+                        agent, action, agents, shared_claim,
                         tick_num, simulation_id,
                     )
                     tick_shares.extend(new_shares)
@@ -340,7 +355,7 @@ class SimulationRunner:
             f"Keep commentary even tighter: 1 short sentence max.\n\n"
             f"On each round, choose exactly ONE action:\n"
             f"1. update_belief — Revise your probability and confidence.\n"
-            f"2. share_claim — Forward one claim to 1-4 trusted peers.\n\n"
+            f"2. share_claim — Either forward one existing claim OR create a new claim and send it to 1-4 trusted peers.\n\n"
             f"IMPORTANT: Good forecasters actively share evidence. You should share claims "
             f"roughly 40-60% of the time — especially when you see a strong or novel claim "
             f"that your peers might not have seen, or when someone shares something with you "
@@ -354,6 +369,9 @@ class SimulationRunner:
             f'"confidence":<float 0-1>,"reasoning":"<text>"}}\n'
             f'{{"action":"share_claim","claim_id":"<id>",'
             f'"target_agent_ids":["<id>","<id>",...],"commentary":"<text>","reasoning":"<text>"}}'
+            f'\n{{"action":"share_claim","claim_text":"<new claim>",'
+            f'"claim_stance":"yes|no","target_agent_ids":["<id>","<id>",...],'
+            f'"commentary":"<text>","reasoning":"<text>"}}'
         )
 
         parts: list[str] = [
@@ -397,9 +415,10 @@ class SimulationRunner:
             parts.append("")
 
         parts.append(
-            "Choose one action. If you share a claim, the claim_id MUST be from the "
-            "visible or incoming claims above. target_agent_ids must be from the "
-            "trusted agents list — include 2-4 agents to spread evidence widely. "
+            "Choose one action. If you share a claim, either use a claim_id from the "
+            "visible or incoming claims above OR create a fresh claim_text of your own. "
+            "If you create a new claim, set claim_stance to yes or no. "
+            "target_agent_ids must be from the trusted agents list — include 2-4 agents to spread evidence widely. "
             "Explain yourself briefly and with personality. "
             "Remember: sharing strong evidence with multiple peers is just as valuable as updating your own belief. "
             "Return ONLY valid JSON."
@@ -448,8 +467,15 @@ class SimulationRunner:
                 parsed.setdefault("reasoning", "")
 
             elif action_type == "share_claim":
-                if not parsed.get("claim_id") or not parsed.get("target_agent_ids"):
+                claim_id = str(parsed.get("claim_id", "")).strip()
+                claim_text = " ".join(str(parsed.get("claim_text", "")).split()).strip()
+                if (not claim_id and not claim_text) or not parsed.get("target_agent_ids"):
                     return default_action
+                parsed["claim_id"] = claim_id
+                parsed["claim_text"] = claim_text
+                claim_stance = str(parsed.get("claim_stance", "")).strip().lower()
+                if claim_stance in ("yes", "no"):
+                    parsed["claim_stance"] = claim_stance
                 parsed.setdefault("commentary", "")
                 parsed.setdefault("reasoning", "")
 
@@ -470,13 +496,29 @@ class SimulationRunner:
         all_agents: list[AgentRecord],
     ) -> bool:
         claim_id = str(action.get("claim_id", "")).strip()
+        claim_text = " ".join(str(action.get("claim_text", "")).split()).strip()
         target_ids = action.get("target_agent_ids", [])
 
         valid_claim_ids = {str(c.id).strip() for c in visible_claims} | {str(ic.claim_id).strip() for ic in incoming_claims}
-        if claim_id not in valid_claim_ids:
+        if claim_id:
+            if claim_id not in valid_claim_ids:
+                logger.warning(
+                    "Agent %s share_claim rejected: claim_id %s not in %d valid claims",
+                    agent.name, claim_id, len(valid_claim_ids),
+                )
+                return False
+        elif not claim_text:
             logger.warning(
-                "Agent %s share_claim rejected: claim_id %s not in %d valid claims",
-                agent.name, claim_id, len(valid_claim_ids),
+                "Agent %s share_claim rejected: missing claim_id and claim_text",
+                agent.name,
+            )
+            return False
+
+        claim_stance = str(action.get("claim_stance", "")).strip().lower()
+        if claim_text and claim_stance and claim_stance not in ("yes", "no"):
+            logger.warning(
+                "Agent %s share_claim rejected: invalid claim_stance %s",
+                agent.name, claim_stance,
             )
             return False
 
@@ -493,6 +535,56 @@ class SimulationRunner:
     # ------------------------------------------------------------------
     # Apply actions
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _estimate_generated_claim_strength(agent: AgentRecord) -> float:
+        extremity = min(1.0, abs(agent.current_belief - 0.5) * 2)
+        return round(max(0.35, min(0.95, 0.35 + agent.confidence * 0.4 + extremity * 0.2)), 3)
+
+    @staticmethod
+    def _estimate_generated_claim_novelty(claim_text: str, claims_by_id: dict[str, Claim]) -> float:
+        normalized = set(claim_text.lower().split())
+        if not normalized:
+            return 0.5
+        best_overlap = 0.0
+        for claim in claims_by_id.values():
+            other_tokens = set(claim.text.lower().split())
+            if not other_tokens:
+                continue
+            overlap = len(normalized & other_tokens) / len(normalized | other_tokens)
+            best_overlap = max(best_overlap, overlap)
+        return round(max(0.25, min(0.95, 0.82 - best_overlap * 0.45)), 3)
+
+    def _resolve_share_claim(
+        self,
+        action: dict[str, Any],
+        agent: AgentRecord,
+        visible_claims: list[Claim],
+        incoming_claims: list[_PendingShare],
+        claims_by_id: dict[str, Claim],
+    ) -> Claim | None:
+        claim_id = str(action.get("claim_id", "")).strip()
+        if claim_id:
+            return claims_by_id.get(claim_id)
+
+        claim_text = " ".join(str(action.get("claim_text", "")).split()).strip()
+        if not claim_text:
+            return None
+
+        claim_stance = str(action.get("claim_stance", "")).strip().lower()
+        if claim_stance not in ("yes", "no"):
+            claim_stance = "yes" if agent.current_belief >= 0.5 else "no"
+
+        for existing in claims_by_id.values():
+            if existing.stance == claim_stance and existing.text.strip().lower() == claim_text.lower():
+                return existing
+
+        return Claim(
+            text=claim_text,
+            stance=claim_stance,
+            strength_score=self._estimate_generated_claim_strength(agent),
+            novelty_score=self._estimate_generated_claim_novelty(claim_text, claims_by_id),
+        )
 
     @staticmethod
     def _apply_belief_update(
@@ -517,13 +609,10 @@ class SimulationRunner:
         agent: AgentRecord,
         action: dict[str, Any],
         all_agents: list[AgentRecord],
-        claims_by_id: dict[str, Claim],
+        claim: Claim,
         current_tick: int,
         simulation_id: str,
     ) -> list[_PendingShare]:
-        claim_id = str(action["claim_id"])
-        claim = claims_by_id.get(claim_id)
-        claim_text = claim.text if claim else ""
         commentary = action.get("commentary", "")
         agent_lookup = {a.id: a for a in all_agents}
 
@@ -534,8 +623,11 @@ class SimulationRunner:
                 from_agent_name=agent.name,
                 to_agent_id=str(tid),
                 to_agent_name=agent_lookup[str(tid)].name if str(tid) in agent_lookup else "Unknown",
-                claim_id=claim_id,
-                claim_text=claim_text,
+                claim_id=claim.id,
+                claim_text=claim.text,
+                claim_stance=claim.stance,
+                claim_strength_score=claim.strength_score,
+                claim_novelty_score=claim.novelty_score,
                 commentary=commentary,
                 tick=current_tick,
                 delivered=False,
