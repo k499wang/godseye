@@ -373,9 +373,12 @@ class PolymarketClient:
             raw_tags = event.get("tags")
             if isinstance(raw_tags, list):
                 for tag in raw_tags:
-                    if not isinstance(tag, dict):
+                    if isinstance(tag, dict):
+                        tag_slug = str(tag.get("slug") or "").strip().lower()
+                    elif isinstance(tag, str):
+                        tag_slug = tag.strip().lower()
+                    else:
                         continue
-                    tag_slug = str(tag.get("slug") or "").strip().lower()
                     if tag_slug and tag_slug not in tag_slugs:
                         tag_slugs.append(tag_slug)
 

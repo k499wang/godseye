@@ -77,7 +77,7 @@ export function browseItemToGlobeEvent(item: MarketBrowseItem): GlobeEvent {
     isImported: item.is_imported,
     volume: item.volume,
     image_url: item.image ?? null,
-    confidence_score: item.probability ?? undefined,
+    confidence_score: undefined,
   };
 }
 

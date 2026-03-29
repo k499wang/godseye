@@ -93,7 +93,7 @@ export default function ReportPage({
     [report?.trust_insights],
   );
   const recommendationBeat = useMemo(
-    () => oneLine(report?.recommendation ?? "", 170),
+    () => oneLine(report?.recommendation ?? ""),
     [report?.recommendation],
   );
 

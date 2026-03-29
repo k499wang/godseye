@@ -13,7 +13,7 @@ _GEMINI_BATCH_SIZE = 20
 _GEMINI_BATCH_TIMEOUT_SECONDS = 8.0
 
 _LEAGUE_TAGS: dict[str, tuple[str, ...]] = {
-    "nba": ("nba", "basketball", "pro-basketball"),
+    "nba": ("nba", "pro-basketball"),
     "nfl": ("nfl", "football", "nfl-football"),
     "nhl": ("nhl", "hockey", "ice-hockey"),
     "mlb": ("mlb", "baseball"),
