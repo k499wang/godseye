@@ -172,6 +172,17 @@ export function AgentConstellation({
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(1240);
   const animationFrameRef = useRef<number | null>(null);
+  const previousLayoutRef = useRef<Map<string, { x: number; y: number }>>(
+    new Map(),
+  );
+  const transitionRef = useRef<{
+    from: Map<string, { x: number; y: number }>;
+    to: Map<string, { x: number; y: number }>;
+  }>({
+    from: new Map(),
+    to: new Map(),
+  });
+  const [transitionProgress, setTransitionProgress] = useState(1);
   const [edgeMode, setEdgeMode] = useState<"both" | "share" | "trust">("both");
 
   // Supabase-sourced trust scores remain a fallback until the API exposes a
@@ -526,10 +537,10 @@ export function AgentConstellation({
     stateById,
   ]);
 
-  const [animatedNodes, setAnimatedNodes] = useState<GraphNode[]>(layout.nodes);
+  const [settledNodes, setSettledNodes] = useState<GraphNode[]>(layout.nodes);
 
   useEffect(() => {
-    setAnimatedNodes((previousNodes) => {
+    setSettledNodes((previousNodes) => {
       if (previousNodes.length === 0) return layout.nodes;
 
       const previousById = new Map(
@@ -555,7 +566,7 @@ export function AgentConstellation({
     if (animationFrameRef.current !== null)
       cancelAnimationFrame(animationFrameRef.current);
 
-    const previousById = new Map(animatedNodes.map((node) => [node.id, node]));
+    const previousById = new Map(settledNodes.map((node) => [node.id, node]));
     const targets = layout.nodes.map((node) => {
       const previous = previousById.get(node.id);
       return {
@@ -566,11 +577,23 @@ export function AgentConstellation({
         toY: node.y ?? node.targetY,
       };
     });
+    const from = new Map(
+      targets.map((target) => [
+        target.id,
+        { x: target.fromX, y: target.fromY },
+      ]),
+    );
+    const to = new Map(
+      targets.map((target) => [target.id, { x: target.toX, y: target.toY }]),
+    );
+    transitionRef.current = { from, to };
     const hasMotion = targets.some(
       (target) => target.fromX !== target.toX || target.fromY !== target.toY,
     );
     if (!hasMotion) {
-      setAnimatedNodes((previousNodes) =>
+      previousLayoutRef.current = new Map(to);
+      setTransitionProgress(1);
+      setSettledNodes((previousNodes) =>
         sameNodeLayout(previousNodes, layout.nodes)
           ? previousNodes
           : layout.nodes,
@@ -579,6 +602,7 @@ export function AgentConstellation({
     }
 
     const start = performance.now();
+    setTransitionProgress(0);
 
     const animate = (now: number) => {
       const progress = Math.min(1, (now - start) / TICK_MOTION_MS);
@@ -589,6 +613,7 @@ export function AgentConstellation({
         animationFrameRef.current = requestAnimationFrame(animate);
       } else {
         previousLayoutRef.current = new Map(to);
+        setSettledNodes(layout.nodes);
         animationFrameRef.current = null;
       }
     };
@@ -601,7 +626,7 @@ export function AgentConstellation({
         animationFrameRef.current = null;
       }
     };
-  }, [layout.nodes]);
+  }, [layout.nodes, settledNodes]);
 
   const animatedNodes = useMemo(() => {
     const { from, to } = transitionRef.current;
