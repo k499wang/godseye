@@ -150,19 +150,11 @@ export function GlobeProvider({ children }: { children: ReactNode }) {
   }, [clearResumeTimer]);
 
   const stopAutoSpin = useCallback(() => {
+    autoSpinEnabledRef.current = false;
+    setAutoSpinEnabledState(false);
     setIsAutoSpinning(false);
-
-    if (!autoSpinEnabledRef.current) {
-      clearResumeTimer();
-      return;
-    }
-
-    if (!isZoomedInRef.current) {
-      scheduleResume();
-    } else {
-      clearResumeTimer();
-    }
-  }, [clearResumeTimer, scheduleResume]);
+    clearResumeTimer();
+  }, [clearResumeTimer]);
 
   const setAutoSpinEnabled = useCallback(
     (enabled: boolean) => {
@@ -185,6 +177,8 @@ export function GlobeProvider({ children }: { children: ReactNode }) {
       setIsZoomedInState(zoomed);
 
       if (zoomed) {
+        autoSpinEnabledRef.current = false;
+        setAutoSpinEnabledState(false);
         setIsAutoSpinning(false);
         clearResumeTimer();
       } else if (autoSpinEnabledRef.current) {

@@ -9,6 +9,7 @@ import { TimelineSlider } from "@/components/TimelineSlider";
 import { EventPanel } from "@/components/EventPanel";
 import { GlobeSearch } from "@/components/GlobeSearch";
 import { GodseyeLogo } from "@/components/GodseyeLogo";
+import { WalletButton } from "@/components/WalletButton";
 import { CATEGORY_COLOR } from "@/lib/globeData";
 import type { GlobeEvent } from "@/lib/globeData";
 
@@ -121,6 +122,28 @@ export function GlobeHomePage({
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [showControlsMenu]);
+
+  useEffect(() => {
+    if (!inExplore) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.code === "Space" || event.key === " ")) return;
+
+      const target = event.target as HTMLElement | null;
+      const isTypingTarget =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable;
+
+      if (isTypingTarget) return;
+
+      event.preventDefault();
+      setAutoSpinEnabled(!autoSpinEnabled);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [autoSpinEnabled, inExplore, setAutoSpinEnabled]);
 
   useEffect(() => {
     if (!initialSelectedEventId) {
@@ -315,6 +338,7 @@ export function GlobeHomePage({
               }}
             >
               <GlobeSearch onSelect={handleSearchSelect} />
+              <WalletButton />
               {inExplore && (
                 <div
                   style={{
