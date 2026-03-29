@@ -99,6 +99,14 @@ async def run_simulation(
             agents=agents,
             claims=claim_objects,
             market_question=market_question,
+            on_tick_complete=(
+                (lambda snapshot, current_agents: _persist_tick(
+                    db,
+                    simulation_id,
+                    snapshot,
+                    current_agents,
+                )) if db else None
+            ),
         )
         logger.info("Simulation %s complete: %d ticks", simulation_id, result.current_tick)
 
@@ -258,12 +266,11 @@ async def _load_agents_from_db(db, simulation_id: str):
 
 
 async def _persist_results(db, simulation_id: str, result: SimulationResult) -> None:
-    """Persist tick_data, updated agents, and claim shares to DB."""
+    """Persist final tick_data and updated agents to DB."""
     if not db:
         return
     try:
         from app.models.agent import Agent
-        from app.models.claim_share import ClaimShare
         from app.models.simulation import Simulation
 
         sim = await db.get(Simulation, UUID(simulation_id))
@@ -281,22 +288,82 @@ async def _persist_results(db, simulation_id: str, result: SimulationResult) -> 
                 db_agent.confidence = ar.confidence
                 db_agent.trust_scores = ar.trust_scores
 
-        # Persist claim shares
-        for snap in result.tick_data:
-            for cs in snap.claim_shares:
-                db.add(ClaimShare(
-                    simulation_id=UUID(simulation_id),
-                    from_agent_id=UUID(cs.from_agent_id),
-                    to_agent_id=UUID(cs.to_agent_id),
-                    claim_id=UUID(cs.claim_id),
-                    commentary=cs.commentary,
-                    tick_number=cs.tick,
-                    delivered=True,
-                ))
-
         await db.commit()
     except Exception as e:
         logger.warning("Failed to persist results: %s", e)
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+
+
+async def _persist_tick(
+    db,
+    simulation_id: str,
+    snapshot: TickSnapshot,
+    agents,
+) -> None:
+    """Persist one completed tick so the UI can observe progress in real time."""
+    if not db:
+        return
+    try:
+        from sqlalchemy import select
+        from app.models.agent import Agent
+        from app.models.claim_share import ClaimShare
+        from app.models.simulation import Simulation
+
+        sim = await db.get(Simulation, UUID(simulation_id))
+        if sim is None:
+            return
+
+        existing_tick_data = list(sim.tick_data or [])
+        if sim.current_tick < snapshot.tick:
+            existing_tick_data.append(_convert_tick_data([snapshot])[0])
+            sim.tick_data = existing_tick_data
+            sim.current_tick = snapshot.tick
+
+        for ar in agents:
+            db_agent = await db.get(Agent, UUID(ar.id))
+            if db_agent:
+                db_agent.current_belief = ar.current_belief
+                db_agent.confidence = ar.confidence
+                db_agent.trust_scores = ar.trust_scores
+
+        existing_shares = (
+            await db.execute(
+                select(ClaimShare).where(
+                    ClaimShare.simulation_id == UUID(simulation_id),
+                    ClaimShare.tick_number == snapshot.tick,
+                )
+            )
+        ).scalars().all()
+        existing_share_keys = {
+            (
+                str(share.from_agent_id),
+                str(share.to_agent_id),
+                str(share.claim_id),
+                int(share.tick_number),
+            )
+            for share in existing_shares
+        }
+
+        for cs in snapshot.claim_shares:
+            share_key = (cs.from_agent_id, cs.to_agent_id, cs.claim_id, cs.tick)
+            if share_key in existing_share_keys:
+                continue
+            db.add(ClaimShare(
+                simulation_id=UUID(simulation_id),
+                from_agent_id=UUID(cs.from_agent_id),
+                to_agent_id=UUID(cs.to_agent_id),
+                claim_id=UUID(cs.claim_id),
+                commentary=cs.commentary,
+                tick_number=cs.tick,
+                delivered=True,
+            ))
+
+        await db.commit()
+    except Exception as e:
+        logger.warning("Failed to persist tick %s for simulation %s: %s", snapshot.tick, simulation_id, e)
         try:
             await db.rollback()
         except Exception:

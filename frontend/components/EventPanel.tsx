@@ -1,5 +1,6 @@
 "use client";
 
+import axios from "axios";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
@@ -88,9 +89,23 @@ export function EventPanel() {
 
       await refreshEvents();
       stopAutoSpin();
-      router.push(`/simulation/${activeSimulation.id}?event=${encodeURIComponent(event.id)}`);
-    } catch {
-      setActionError("Could not start the simulation for this market.");
+      router.push(`/simulation/${builtSimulation.id}?event=${encodeURIComponent(event.id)}`);
+      void refreshEvents();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const detail = error.response?.data?.detail;
+        if (typeof detail === "string") {
+          setActionError(detail);
+        } else if (typeof detail?.detail === "string") {
+          setActionError(detail.detail);
+        } else {
+          setActionError(error.message || "Could not start the simulation for this market.");
+        }
+      } else if (error instanceof Error) {
+        setActionError(error.message);
+      } else {
+        setActionError("Could not start the simulation for this market.");
+      }
     } finally {
       setIsActionPending(false);
     }

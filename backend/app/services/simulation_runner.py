@@ -20,7 +20,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Awaitable, Callable, Literal
 
 from app.core.llm_client import llm_client, MODEL_GEMINI_FLASH
 from app.services.world_builder import AgentRecord
@@ -167,6 +167,7 @@ class SimulationRunner:
         claims: list[Claim] | None = None,
         market_question: str = "",
         total_ticks: int = TOTAL_TICKS,
+        on_tick_complete: Callable[[TickSnapshot, list[AgentRecord]], Awaitable[None]] | None = None,
     ) -> SimulationResult:
         if not claims:
             claims = _generate_stub_claims()
@@ -242,18 +243,22 @@ class SimulationRunner:
             faction_clusters = self._detect_factions(agents)
 
             # 6. Build snapshot
-            tick_data.append(TickSnapshot(
+            snapshot = TickSnapshot(
                 tick=tick_num,
                 agent_states=tick_agent_states,
                 claim_shares=tick_shares,
                 trust_updates=trust_updates,
                 faction_clusters=faction_clusters,
-            ))
+            )
+            tick_data.append(snapshot)
 
             # 7. Mark incoming shares as delivered
             for shares in incoming_by_agent.values():
                 for share in shares:
                     share.delivered = True
+
+            if on_tick_complete is not None:
+                await on_tick_complete(snapshot, agents)
 
         return SimulationResult(
             simulation_id=simulation_id,
