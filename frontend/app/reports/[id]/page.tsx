@@ -274,11 +274,11 @@ export default function ReportPage({
                     <div className="eyebrow mb-2 text-[var(--accent)]">Trade</div>
                     <div className="text-xl font-semibold tracking-tight text-[var(--text-bright)]">
                       {paperTrading.position
-                        ? `You are trdae long ${paperTrading.position.side.toUpperCase()}`
+                        ? `You are trade long ${paperTrading.position.side.toUpperCase()}`
                         : "Bet this market after reading the simulation"}
                     </div>
                     <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-secondary)]">
-                      Save a trdae position directly from the report and track it against the current market probability.
+                      Save a trade position directly from the report and track it against the current market probability.
                     </p>
                   </div>
                   <button
