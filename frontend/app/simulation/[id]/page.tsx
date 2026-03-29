@@ -1,9 +1,9 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { getSimulation } from "@/lib/api";
+import { getSimulation, startSimulation } from "@/lib/api";
 import { GodseyeLogo } from "@/components/GodseyeLogo";
 import { MOCK_SIMULATION } from "@/lib/mockData";
 import { SimulationReplay } from "@/components/SimulationReplay";
@@ -25,19 +25,36 @@ export default function SimulationPage({
   const backHref = selectedEventId
     ? `/?mode=explore&event=${encodeURIComponent(selectedEventId)}`
     : "/?mode=explore";
+  const [isAutoStarting, setIsAutoStarting] = useState(false);
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["simulation", id],
     queryFn: () => getSimulation(id),
     enabled: !isMock,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      if (status === "running" || status === "building") return POLLING_INTERVAL_MS;
+      if (status === "running" || status === "building" || status === "pending") {
+        return POLLING_INTERVAL_MS;
+      }
       return false;
     },
   });
 
   const simulation = isMock ? MOCK_SIMULATION : data;
+
+  useEffect(() => {
+    if (isMock || !simulation) return;
+    if (simulation.status !== "pending") return;
+    if (isAutoStarting) return;
+
+    setIsAutoStarting(true);
+    startSimulation(simulation.id)
+      .catch(() => undefined)
+      .finally(() => {
+        setIsAutoStarting(false);
+        void refetch();
+      });
+  }, [isAutoStarting, isMock, refetch, simulation]);
 
   if (!isMock && isLoading) {
     return (
@@ -72,6 +89,14 @@ export default function SimulationPage({
   if (!simulation) return null;
 
   const reportReady = simulation.status === "complete";
+  const statusLabel =
+    simulation.status === "building"
+      ? "Building agent society..."
+      : simulation.status === "pending" || isAutoStarting
+        ? "Starting live simulation..."
+        : simulation.status === "running"
+          ? "Simulation live"
+          : null;
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--bg-base)]">
@@ -96,6 +121,12 @@ export default function SimulationPage({
             </span>
           </div>
         </div>
+
+        {statusLabel && (
+          <div className="ui-mono rounded-full border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.08)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+            {statusLabel}
+          </div>
+        )}
 
         {reportReady && (
           <button

@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.models.agent import Agent
 from app.models.claim import Claim
 from app.models.market import Market
@@ -56,28 +56,6 @@ async def build_world(
         tick_data=[],
     )
     db.add(simulation)
-    await db.flush()
-
-    agent_records = await world_builder.build_world(
-        session_id=str(session.id),
-        simulation_id=str(simulation.id),
-        market_question=session.market.question,
-    )
-
-    db.add_all(
-        Agent(
-            id=UUID(agent_record.id),
-            simulation_id=simulation.id,
-            name=agent_record.name,
-            archetype=agent_record.archetype,
-            initial_belief=Decimal(str(agent_record.initial_belief)),
-            current_belief=Decimal(str(agent_record.current_belief)),
-            confidence=Decimal(str(agent_record.confidence)),
-            professional_background=agent_record.professional_background,
-            trust_scores=agent_record.trust_scores,
-        )
-        for agent_record in agent_records
-    )
 
     try:
         await db.commit()
@@ -87,6 +65,14 @@ async def build_world(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"detail": "Failed to build simulation world", "code": "DATABASE_ERROR"},
         ) from exc
+
+    asyncio.create_task(
+        _build_world_background(
+            simulation_id=simulation.id,
+            session_id=session.id,
+            market_question=session.market.question,
+        )
+    )
 
     simulation = await _load_simulation(db=db, simulation_id=simulation.id)
     if simulation is None:
@@ -107,6 +93,18 @@ async def start_simulation(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"detail": "Simulation not found", "code": "SIMULATION_NOT_FOUND"},
+        )
+
+    if simulation.status == "complete":
+        return _to_simulation_response(simulation)
+
+    if simulation.status == "running":
+        return _to_simulation_response(simulation)
+
+    if simulation.status == "building" and len(simulation.agents) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"detail": "Simulation world is still building", "code": "SIMULATION_BUILDING"},
         )
 
     simulation.status = "running"
@@ -243,3 +241,50 @@ def _to_simulation_response(simulation: Simulation) -> SimulationResponse:
         created_at=simulation.created_at,
         completed_at=simulation.completed_at,
     )
+
+
+async def _build_world_background(
+    *,
+    simulation_id: UUID,
+    session_id: UUID,
+    market_question: str,
+) -> None:
+    async with SessionLocal() as db:
+        try:
+            simulation = await _load_simulation(db=db, simulation_id=simulation_id)
+            if simulation is None:
+                return
+            if simulation.agents:
+                if simulation.status == "building":
+                    simulation.status = "pending"
+                    await db.commit()
+                return
+
+            agent_records = await world_builder.build_world(
+                session_id=str(session_id),
+                simulation_id=str(simulation_id),
+                market_question=market_question,
+            )
+
+            db.add_all(
+                Agent(
+                    id=UUID(agent_record.id),
+                    simulation_id=simulation_id,
+                    name=agent_record.name,
+                    archetype=agent_record.archetype,
+                    initial_belief=Decimal(str(agent_record.initial_belief)),
+                    current_belief=Decimal(str(agent_record.current_belief)),
+                    confidence=Decimal(str(agent_record.confidence)),
+                    professional_background=agent_record.professional_background,
+                    trust_scores=agent_record.trust_scores,
+                )
+                for agent_record in agent_records
+            )
+            simulation.status = "pending"
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            simulation = await db.get(Simulation, simulation_id)
+            if simulation is not None:
+                simulation.status = "failed"
+                await db.commit()
