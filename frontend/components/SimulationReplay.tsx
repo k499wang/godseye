@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useEffect } from "react";
 import type { SimulationResponse, TickSnapshot } from "@/lib/types";
-import { ARCHETYPE_COLORS, ARCHETYPE_LABELS } from "@/lib/constants";
 import { BeliefChart } from "./BeliefChart";
 import { AgentDebateFeed } from "./AgentDebateFeed";
 import { AgentConstellation } from "./AgentConstellation";
@@ -96,16 +95,42 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
 
   return (
     <div className="min-h-[1500px] bg-[var(--bg-base)] text-[var(--text-primary)]">
-      <div className="flex items-center justify-between gap-4 border-b border-white/8 px-3.5 py-2">
+      <div className="flex items-center justify-between gap-4 border-b border-white/6 px-3 py-2">
         <div className="flex flex-wrap items-center gap-3">
           <span className="eyebrow">Simulation replay</span>
-          <span className="ui-mono text-sm text-[var(--text-muted)]">
+          <span className="ui-mono text-[13px] text-[var(--text-muted)]">
             {simulation.id.slice(0, 8).toUpperCase()}
           </span>
           <StatusBadge status={simulation.status} />
         </div>
 
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 rounded-full border border-[rgba(245,158,11,0.16)] bg-[rgba(255,255,255,0.02)] px-2 py-1.5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+            <button
+              className="ui-mono rounded-full border border-[rgba(245,158,11,0.28)] bg-[rgba(245,158,11,0.08)] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] shadow-[0_6px_20px_rgba(245,158,11,0.14)] transition hover:bg-[rgba(245,158,11,0.14)] hover:shadow-[0_8px_24px_rgba(245,158,11,0.22)]"
+              onClick={() => {
+                const index = tickData.findIndex((tick) => tick.tick === currentTick);
+                if (index > 0) setCurrentTick(tickData[index - 1].tick);
+              }}
+            >
+              Prev
+            </button>
+            <div className="flex items-center gap-2 px-2">
+              <span className="eyebrow">Tick</span>
+              <span className="ui-mono text-base font-semibold text-[var(--accent)]">
+                {String(currentTick).padStart(2, "0")}
+              </span>
+            </div>
+            <button
+              className="ui-mono rounded-full border border-[rgba(245,158,11,0.28)] bg-[rgba(245,158,11,0.08)] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] shadow-[0_6px_20px_rgba(245,158,11,0.14)] transition hover:bg-[rgba(245,158,11,0.14)] hover:shadow-[0_8px_24px_rgba(245,158,11,0.22)]"
+              onClick={() => {
+                const index = tickData.findIndex((tick) => tick.tick === currentTick);
+                if (index < tickData.length - 1) setCurrentTick(tickData[index + 1].tick);
+              }}
+            >
+              Next
+            </button>
+          </div>
           {consensusAtTick !== null && (
             <MetricInline
               label="Consensus"
@@ -124,14 +149,7 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
         </div>
       </div>
 
-      <div className="border-b border-white/6 px-3.5 py-2.5">
-        <div className="mb-1.5 flex items-center gap-3">
-          <span className="eyebrow">Tick</span>
-          <span className="ui-mono text-sm font-semibold text-[var(--accent)]">
-            {String(currentTick).padStart(2, "0")}
-          </span>
-        </div>
-
+      <div className="border-b border-white/6 px-3 py-1.5">
         <div className="relative">
           <div className="relative h-1.5 w-full rounded-full bg-[rgba(255,255,255,0.08)]">
             <div
@@ -162,37 +180,16 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
             })}
           </div>
 
-          <div className="mt-2 flex justify-between text-xs text-[var(--text-muted)]">
+          <div className="mt-1.5 flex justify-between text-[11px] text-[var(--text-muted)]">
             <span className="ui-mono">1</span>
             <span className="ui-mono">{totalTicks}</span>
           </div>
         </div>
-
-        <div className="mt-2.5 flex gap-2">
-          <button
-            className="ui-mono rounded-full border border-white/12 px-3.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-            onClick={() => {
-              const index = tickData.findIndex((tick) => tick.tick === currentTick);
-              if (index > 0) setCurrentTick(tickData[index - 1].tick);
-            }}
-          >
-            Prev
-          </button>
-          <button
-            className="ui-mono rounded-full border border-white/12 px-3.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-            onClick={() => {
-              const index = tickData.findIndex((tick) => tick.tick === currentTick);
-              if (index < tickData.length - 1) setCurrentTick(tickData[index + 1].tick);
-            }}
-          >
-            Next
-          </button>
-        </div>
       </div>
 
       <div className="flex">
-        <div className="flex flex-col border-r border-white/8" style={{ width: "68%" }}>
-          <div className="border-b border-white/6 p-2.5">
+        <div className="flex flex-col border-r border-white/6" style={{ width: "70%" }}>
+          <div className="border-b border-white/6 p-2">
             <AgentConstellation
               agents={agents}
               tickData={tickData}
@@ -202,8 +199,8 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
             />
           </div>
 
-          <div className="p-2.5" style={{ minHeight: 320 }}>
-            <div className="mb-1.5 flex items-center gap-2">
+          <div className="p-2" style={{ minHeight: 312 }}>
+            <div className="mb-1 flex items-center gap-2">
               <span className="eyebrow">Belief motion timeline</span>
             </div>
             <div style={{ height: 280 }}>
@@ -219,8 +216,8 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
         </div>
 
         <div className="flex flex-1 flex-col">
-          <div className="p-2.5">
-            <div className="mb-1.5 flex items-center gap-2">
+          <div className="p-2">
+            <div className="mb-1 flex items-center gap-2">
               <span className="eyebrow">Claim propagation stream</span>
             </div>
             <AgentDebateFeed

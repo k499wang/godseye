@@ -24,8 +24,8 @@ type AgentStateView = {
 
 const SCENE_W = 920;
 const SCENE_H = 1040;
-const X_PAD = 126;
-const Y_PAD = 112;
+const X_PAD = 220;
+const Y_PAD = 190;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -111,13 +111,13 @@ export function AgentConstellation({
       const state = stateById.get(agent.id);
       if (!state) continue;
       const salt = hash(agent.id);
-      const xJitter = ((salt % 17) - 8) * 3;
-      const yJitter = ((Math.floor(salt / 17) % 19) - 9) * 4;
+      const xJitter = ((salt % 17) - 8) * 1.5;
+      const yJitter = ((Math.floor(salt / 17) % 19) - 9) * 2;
       const x = X_PAD + state.belief * (SCENE_W - X_PAD * 2) + xJitter;
       const y = Y_PAD + (1 - state.confidence) * (SCENE_H - Y_PAD * 2) + yJitter;
       map.set(agent.id, {
-        x: clamp(x, 72, SCENE_W - 72),
-        y: clamp(y, 72, SCENE_H - 72),
+        x: clamp(x, 120, SCENE_W - 120),
+        y: clamp(y, 120, SCENE_H - 120),
       });
     }
     return map;
@@ -150,8 +150,8 @@ export function AgentConstellation({
   }
 
   return (
-    <div className="rounded-[26px] border border-white/8 bg-[linear-gradient(180deg,rgba(14,19,30,0.9),rgba(8,11,18,0.96))] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.24)]">
-      <div className="mb-2 flex items-start justify-between gap-3">
+    <div className="rounded-[22px] border border-white/6 bg-[linear-gradient(180deg,rgba(13,17,26,0.9),rgba(8,11,18,0.96))] p-3 shadow-[0_14px_44px_rgba(0,0,0,0.18)]">
+      <div className="mb-1.5 flex items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="eyebrow text-[var(--accent)]">Agent constellation</span>
           <span className="ui-mono rounded-full border border-white/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
@@ -165,7 +165,7 @@ export function AgentConstellation({
           </span>
         </div>
         {selectedAgent && selectedState && (
-          <div className="w-[320px] rounded-[14px] border border-white/8 bg-[rgba(255,255,255,0.025)] px-3 py-1.5">
+          <div className="w-[300px] rounded-[12px] border border-white/8 bg-[rgba(255,255,255,0.02)] px-2.5 py-1.5">
             <div className="flex items-center gap-3">
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold text-[var(--text-bright)]">{selectedAgent.name}</div>
@@ -208,7 +208,7 @@ export function AgentConstellation({
       </div>
 
       <div
-        className="overflow-y-auto rounded-[22px] border border-[rgba(255,255,255,0.08)] bg-[radial-gradient(circle_at_50%_0%,rgba(34,197,94,0.06),transparent_30%),radial-gradient(circle_at_85%_15%,rgba(59,130,246,0.1),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-4"
+        className="overflow-y-auto rounded-[18px] border border-[rgba(255,255,255,0.06)] bg-[radial-gradient(circle_at_50%_0%,rgba(34,197,94,0.045),transparent_30%),radial-gradient(circle_at_85%_15%,rgba(59,130,246,0.08),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.008))] p-3"
         style={{ height: 620 }}
       >
         <div className="relative mx-auto" style={{ width: SCENE_W, height: SCENE_H }}>
@@ -339,47 +339,6 @@ export function AgentConstellation({
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-4 gap-2.5">
-        {agents.map((agent) => {
-          const state = stateById.get(agent.id);
-          if (!state) return null;
-          const color = ARCHETYPE_COLORS[agent.archetype] ?? "#fff";
-          const selected = selectedAgent?.id === agent.id;
-          return (
-            <button
-              key={agent.id}
-              type="button"
-              onClick={() => onSelectAgent(agent.id)}
-              className="rounded-[16px] border px-3 py-2.5 text-left transition"
-              style={{
-                borderColor: selected ? `${color}66` : "rgba(255,255,255,0.08)",
-                background: selected ? `${color}16` : "rgba(255,255,255,0.03)",
-              }}
-            >
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="truncate text-[13px] font-medium text-[var(--text-bright)]">
-                  {shortName(agent.name)}
-                </span>
-                <span className="ui-mono text-xs font-bold" style={{ color }}>
-                  {Math.round(state.belief * 100)}%
-                </span>
-              </div>
-              <div
-                className="ui-mono mb-2 truncate text-[10px] uppercase tracking-[0.16em]"
-                style={{ color: `${color}dd` }}
-              >
-                {ARCHETYPE_LABELS[agent.archetype]}
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
-                <div
-                  className="h-full rounded-full"
-                  style={{ width: `${state.confidence * 100}%`, background: color }}
-                />
-              </div>
-            </button>
-          );
-        })}
-      </div>
     </div>
   );
 }
