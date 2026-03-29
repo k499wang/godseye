@@ -5,7 +5,7 @@ import type { SimulationResponse, TickSnapshot } from "@/lib/types";
 import { ARCHETYPE_COLORS, ARCHETYPE_LABELS } from "@/lib/constants";
 import { BeliefChart } from "./BeliefChart";
 import { AgentDebateFeed } from "./AgentDebateFeed";
-import { TrustNetwork } from "./TrustNetwork";
+import { AgentConstellation } from "./AgentConstellation";
 
 interface SimulationReplayProps {
   simulation: SimulationResponse;
@@ -49,6 +49,7 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
       ? simulation.tick_data[simulation.tick_data.length - 1].tick
       : 1
   );
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
   const tickData = simulation.tick_data;
   const agents = simulation.agents;
@@ -75,13 +76,24 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
     }
   }, [currentTick, latestLoadedTick, simulation.status, tickData]);
 
+  useEffect(() => {
+    if (!agents.length) {
+      setSelectedAgentId(null);
+      return;
+    }
+    if (selectedAgentId && agents.some((agent) => agent.id === selectedAgentId)) {
+      return;
+    }
+    setSelectedAgentId(agents[0].id);
+  }, [agents, selectedAgentId]);
+
   const consensusAtTick = currentSnapshot
     ? currentSnapshot.agent_states.reduce((sum, state) => sum + state.belief, 0) /
       currentSnapshot.agent_states.length
     : null;
 
   return (
-    <div className="flex h-full flex-col bg-[var(--bg-base)] text-[var(--text-primary)]">
+    <div className="min-h-[1500px] bg-[var(--bg-base)] text-[var(--text-primary)]">
       <div className="flex items-center justify-between gap-4 border-b border-white/8 px-5 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className="eyebrow">Simulation replay</span>
@@ -176,14 +188,21 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div
-          className="flex min-h-0 flex-col border-r border-white/8"
-          style={{ width: "55%" }}
-        >
-          <div className="flex-1 min-h-0 border-b border-white/6 p-4">
-            <div className="eyebrow mb-3">Belief convergence</div>
-            <div style={{ height: "calc(100% - 24px)" }}>
+      <div className="flex">
+        <div className="flex flex-col border-r border-white/8" style={{ width: "64%" }}>
+          <div className="border-b border-white/6 p-4">
+            <AgentConstellation
+              agents={agents}
+              tickData={tickData}
+              currentTick={currentTick}
+              selectedAgentId={selectedAgentId}
+              onSelectAgent={setSelectedAgentId}
+            />
+          </div>
+
+          <div className="p-4" style={{ minHeight: 340 }}>
+            <div className="eyebrow mb-3">Belief motion timeline</div>
+            <div style={{ height: 280 }}>
               <BeliefChart
                 agents={agents}
                 tickData={tickData}
@@ -193,70 +212,11 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
               />
             </div>
           </div>
-
-          <div className="flex overflow-hidden" style={{ height: 300 }}>
-            <div className="flex-shrink-0 border-r border-white/6 p-4">
-              <TrustNetwork agents={agents} tickSnapshot={currentSnapshot} />
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="eyebrow mb-3">Agent states</div>
-              <div className="flex flex-col gap-2">
-                {agents.map((agent) => {
-                  const color = ARCHETYPE_COLORS[agent.archetype] ?? "#ffffff";
-                  const tickState = currentSnapshot?.agent_states.find(
-                    (state) => state.agent_id === agent.id
-                  );
-                  const belief = tickState?.belief ?? agent.initial_belief;
-                  const delta = belief - agent.initial_belief;
-
-                  return (
-                    <div
-                      key={agent.id}
-                      className="rounded-[20px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
-                          style={{ background: color, boxShadow: `0 0 10px ${color}66` }}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium text-[var(--text-bright)]">
-                            {agent.name}
-                          </div>
-                          <div
-                            className="ui-mono truncate text-[11px] uppercase tracking-[0.16em]"
-                            style={{ color: `${color}cc` }}
-                          >
-                            {ARCHETYPE_LABELS[agent.archetype]}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 text-right">
-                          <span
-                            className="ui-mono text-base font-bold"
-                            style={{ color }}
-                          >
-                            {Math.round(belief * 100)}%
-                          </span>
-                          <span
-                            className="ui-mono text-[11px] font-semibold uppercase tracking-[0.12em]"
-                            style={{ color: delta >= 0 ? "var(--success)" : "var(--danger)" }}
-                          >
-                            {delta >= 0 ? "+" : ""}
-                            {Math.round(delta * 100)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
         </div>
 
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="flex-1 overflow-hidden p-4">
+        <div className="flex flex-1 flex-col">
+          <div className="p-4">
+            <div className="eyebrow mb-3">Claim propagation stream</div>
             <AgentDebateFeed
               agents={agents}
               tickSnapshot={currentSnapshot}
