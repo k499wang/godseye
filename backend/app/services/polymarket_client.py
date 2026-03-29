@@ -288,6 +288,15 @@ class PolymarketClient:
             volume = float(_coerce_decimal(event.get("volume") or 0))
             volume24hr = float(_coerce_decimal(event.get("volume24hr") or 0))
             url = f"https://polymarket.com/event/{slug}"
+            tag_slugs: list[str] = []
+            raw_tags = event.get("tags")
+            if isinstance(raw_tags, list):
+                for tag in raw_tags:
+                    if not isinstance(tag, dict):
+                        continue
+                    tag_slug = str(tag.get("slug") or "").strip().lower()
+                    if tag_slug and tag_slug not in tag_slugs:
+                        tag_slugs.append(tag_slug)
 
             # Probability: only meaningful for binary (single Yes/No) markets
             probability: float | None = None
@@ -315,6 +324,7 @@ class PolymarketClient:
                 "volume": volume,
                 "volume24hr": volume24hr,
                 "probability": probability,
+                "tag_slugs": tag_slugs,
             })
 
         return results
