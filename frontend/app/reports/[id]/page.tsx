@@ -123,7 +123,7 @@ export default function ReportPage({
           )}
           <button
             onClick={() => router.push(simulationHref)}
-            className="ui-mono mt-6 rounded-full border border-white/15 px-5 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            className="ui-mono mt-6 border border-white/15 px-5 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
           >
             Back to simulation
           </button>
@@ -146,7 +146,7 @@ export default function ReportPage({
           </p>
           <button
             onClick={() => router.push(backHref)}
-            className="ui-mono mt-6 rounded-full border border-white/15 px-5 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            className="ui-mono mt-6 border border-white/15 px-5 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
           >
             Back to market
           </button>
@@ -187,7 +187,7 @@ export default function ReportPage({
             <div className="flex items-center gap-4">
               <button
                 onClick={() => router.push(backHref)}
-                className="ui-mono rounded-full border border-white/12 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                className="ui-mono border border-white/12 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
               >
                 Back
               </button>
@@ -210,13 +210,13 @@ export default function ReportPage({
               <Pill tone="accent">{isMock ? "Demo mode" : "Live data"}</Pill>
               <button
                 onClick={() => router.push(simulationHref)}
-                className="ui-mono rounded-full border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.08)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)] transition hover:bg-[rgba(245,158,11,0.14)]"
+                className="ui-mono border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.08)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)] transition hover:bg-[rgba(245,158,11,0.14)]"
               >
                 View simulation
               </button>
               <button
                 onClick={() => router.push("/?mode=explore")}
-                className="ui-mono rounded-full border border-white/12 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-white/25 hover:text-[var(--text-primary)]"
+                className="ui-mono border border-white/12 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-white/25 hover:text-[var(--text-primary)]"
               >
                 New analysis
               </button>
@@ -252,11 +252,11 @@ export default function ReportPage({
               </div>
 
               <div className="mt-8 grid gap-4 md:grid-cols-2">
-                <div className="rounded-[24px] border border-white/10 bg-[rgba(9,13,22,0.75)] p-5">
+                <div className="border border-white/10 bg-[rgba(9,13,22,0.75)] p-5">
                   <div className="eyebrow mb-3">Executive read</div>
                   <p className="report-copy">{report.summary}</p>
                 </div>
-                <div className="rounded-[24px] border border-white/10 bg-[rgba(9,13,22,0.75)] p-5">
+                <div className="border border-white/10 bg-[rgba(9,13,22,0.75)] p-5">
                   <div className="eyebrow mb-3">Model stance</div>
                   <div className="text-2xl font-semibold tracking-tight text-[var(--text-bright)]">
                     {simulationTone}
@@ -268,7 +268,7 @@ export default function ReportPage({
                 </div>
               </div>
 
-              <div className="mt-6 flex flex-col gap-4 rounded-[24px] border border-[rgba(245,158,11,0.16)] bg-[rgba(245,158,11,0.05)] p-5">
+              <div className="mt-6 flex flex-col gap-4 border border-[rgba(245,158,11,0.16)] bg-[rgba(245,158,11,0.05)] p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <div className="eyebrow mb-2 text-[var(--accent)]">Trade</div>
@@ -283,7 +283,7 @@ export default function ReportPage({
                   </div>
                   <button
                     onClick={() => setIsTradeDrawerOpen(true)}
-                    className="ui-mono rounded-full border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.12)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)] transition hover:bg-[rgba(245,158,11,0.18)]"
+                    className="ui-mono border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.12)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)] transition hover:bg-[rgba(245,158,11,0.18)]"
                   >
                     {paperTrading.position ? "Add to trade position" : "Trade this market"}
                   </button>
@@ -362,11 +362,11 @@ export default function ReportPage({
                 return (
                   <div
                     key={driver}
-                    className="rounded-[22px] border border-white/8 bg-[rgba(255,255,255,0.025)] p-4"
+                    className="border border-white/8 bg-[rgba(255,255,255,0.025)] p-4"
                   >
                     <div className="mb-2 flex items-center gap-3">
                       <span
-                        className="ui-mono inline-flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold"
+                        className="ui-mono inline-flex h-8 w-8 items-center justify-center border text-xs font-semibold"
                         style={{
                           borderColor: isPositive ? "rgba(52,211,153,0.32)" : "rgba(245,158,11,0.28)",
                           color: isPositive ? "var(--success)" : "var(--accent)",
@@ -426,7 +426,7 @@ export default function ReportPage({
             </div>
             <button
               onClick={() => router.push(simulationHref)}
-              className="ui-mono rounded-full border border-white/12 px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              className="ui-mono border border-white/12 px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
             >
               Return to replay
             </button>
@@ -559,7 +559,7 @@ function ReportVisual({
           </span>
         </div>
 
-        <div className="grid flex-1 grid-cols-[1fr_auto_1fr] items-end gap-4 rounded-[24px] border border-white/8 bg-[rgba(5,7,13,0.58)] px-5 pb-5 pt-10">
+        <div className="grid flex-1 grid-cols-[1fr_auto_1fr] items-end gap-4 border border-white/8 bg-[rgba(5,7,13,0.58)] px-5 pb-5 pt-10">
           <SignalBar
             label="Market"
             value={marketProbability}
@@ -576,14 +576,14 @@ function ReportVisual({
         </div>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-[22px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-4">
+          <div className="border border-white/8 bg-[rgba(255,255,255,0.03)] p-4">
             <div className="eyebrow mb-2">Interpretation</div>
             <div className="text-base leading-7 text-[var(--text-secondary)]">
               The visual above is generated directly from the market and simulation
               probabilities so each report gets its own signal profile.
             </div>
           </div>
-          <div className="rounded-[22px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-4">
+          <div className="border border-white/8 bg-[rgba(255,255,255,0.03)] p-4">
             <div className="eyebrow mb-2">Next step</div>
             <div className="text-base leading-7 text-[var(--text-secondary)]">
               A future backend field can swap this placeholder for a market-specific
@@ -614,7 +614,7 @@ function SignalBar({
       <div className="mb-3 text-sm font-medium text-[var(--text-secondary)]">{label}</div>
       <div className="relative flex h-[260px] items-end">
         <div
-          className="w-24 rounded-[22px] border border-white/10"
+          className="w-24 border border-white/10"
           style={{
             height,
             background: `linear-gradient(180deg, ${color} 0%, rgba(12,17,25,0.22) 100%)`,
@@ -664,7 +664,7 @@ function Pill({
 
   return (
     <span
-      className="ui-mono inline-flex rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em]"
+      className="ui-mono inline-flex border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em]"
       style={styles}
     >
       {children}
@@ -723,7 +723,7 @@ function PositionMetric({
   tone?: "success" | "danger";
 }) {
   return (
-    <div className="rounded-[18px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3">
+    <div className="border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3">
       <div className="eyebrow mb-1">{label}</div>
       <div
         className="text-base font-semibold"

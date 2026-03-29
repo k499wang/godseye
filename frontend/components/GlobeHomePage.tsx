@@ -5,7 +5,6 @@ import { forwardRef, useCallback, useEffect, useRef, useState, type CSSPropertie
 import { useRouter } from "next/navigation";
 import { useGlobe } from "@/components/GlobeContext";
 import { FilterBar } from "@/components/FilterBar";
-import { TimelineSlider } from "@/components/TimelineSlider";
 import { EventPanel } from "@/components/EventPanel";
 import { GlobeSearch } from "@/components/GlobeSearch";
 import { GodseyeLogo } from "@/components/GodseyeLogo";
@@ -18,13 +17,13 @@ const GlobeScene = dynamic(() => import("@/components/GlobeScene"), {
   loading: () => <GlobeLoader />,
 });
 
-type PageMode = "intro" | "explore" | "timeline";
+type PageMode = "intro" | "explore";
 
 export function GlobeHomePage({
   initialMode,
   initialSelectedEventId,
 }: {
-  initialMode: Exclude<PageMode, "timeline">;
+  initialMode: PageMode;
   initialSelectedEventId: string | null;
 }) {
   const router = useRouter();
@@ -53,15 +52,10 @@ export function GlobeHomePage({
   const controlsMenuRef = useRef<HTMLDivElement | null>(null);
   const filterBarRef = useRef<HTMLDivElement | null>(null);
   const topRightRef = useRef<HTMLDivElement | null>(null);
-  const exploreSnapshotRef = useRef<{
-    selectedEventId: string | null;
-    focusTarget: { lat: number; lng: number } | null;
-  } | null>(null);
 
   const activeEvent = events.find((event) => event.id === selectedEventId) ?? null;
   const inIntro = mode === "intro";
   const inExplore = mode === "explore";
-  const inTimeline = mode === "timeline";
   const panelOpen = inExplore && !!selectedEventId;
 
   const marketCountTone =
@@ -109,7 +103,7 @@ export function GlobeHomePage({
       resizeObserver.disconnect();
       window.removeEventListener("resize", updateOverlap);
     };
-  }, [inIntro, inTimeline, panelOpen, showControlsMenu]);
+  }, [inIntro, panelOpen, showControlsMenu]);
 
   useEffect(() => {
     if (!showControlsMenu) return;
@@ -173,24 +167,6 @@ export function GlobeHomePage({
     router.replace("/?mode=explore", { scroll: false });
   }, [router]);
 
-  const handleEnterTimeline = useCallback(() => {
-    exploreSnapshotRef.current = {
-      selectedEventId,
-      focusTarget: globeFocusTarget,
-    };
-    setShowControlsMenu(false);
-    setMode("timeline");
-    setSelectedEventId(null);
-    setGlobeFocusTarget(null);
-  }, [globeFocusTarget, selectedEventId, setGlobeFocusTarget, setSelectedEventId]);
-
-  const handleExitTimeline = useCallback(() => {
-    const snapshot = exploreSnapshotRef.current;
-    setMode("explore");
-    setSelectedEventId(snapshot?.selectedEventId ?? null);
-    setGlobeFocusTarget(snapshot?.focusTarget ?? null);
-  }, [setGlobeFocusTarget, setSelectedEventId]);
-
   const handleBack = useCallback(() => {
     setSelectedEventId(null);
     setGlobeFocusTarget(null);
@@ -207,15 +183,13 @@ export function GlobeHomePage({
       setSelectedEventId(event.id);
       setGlobeFocusTarget({ lat: event.lat, lng: event.lng });
 
-      if (mode === "timeline") return;
-
       stopAutoSpin();
       setMode("explore");
       router.replace(`/?mode=explore&event=${encodeURIComponent(event.id)}`, {
         scroll: false,
       });
     },
-    [mode, router, setSelectedEventId, setGlobeFocusTarget, stopAutoSpin]
+    [router, setSelectedEventId, setGlobeFocusTarget, stopAutoSpin]
   );
 
   const handleSearchSelect = useCallback(
@@ -223,20 +197,18 @@ export function GlobeHomePage({
       setSelectedEventId(event.id);
       setGlobeFocusTarget({ lat: event.lat, lng: event.lng });
 
-      if (mode === "timeline") return;
-
       stopAutoSpin();
       setMode("explore");
       router.replace(`/?mode=explore&event=${encodeURIComponent(event.id)}`, {
         scroll: false,
       });
     },
-    [mode, router, setSelectedEventId, setGlobeFocusTarget, stopAutoSpin]
+    [router, setSelectedEventId, setGlobeFocusTarget, stopAutoSpin]
   );
 
   const dimTopControls = topControlsOverlap && !topChromeHovered;
   const dimFilterBar = topControlsOverlap && !filterHovered;
-  const showTopChrome = inExplore || inTimeline;
+  const showTopChrome = inExplore;
 
   return (
     <main
@@ -269,7 +241,7 @@ export function GlobeHomePage({
           onFlyComplete={() => undefined}
           onInteraction={stopAutoSpin}
           onZoomChange={setIsZoomedIn}
-          isAutoSpinning={inTimeline ? false : isAutoSpinning}
+          isAutoSpinning={isAutoSpinning}
         />
       </div>
 
@@ -292,42 +264,33 @@ export function GlobeHomePage({
           }}
         >
           <div style={{ pointerEvents: "auto", display: "flex", alignItems: "center", gap: 14 }}>
-            {inTimeline ? (
-              <button type="button" onClick={handleExitTimeline} style={backButtonStyle}>
-                <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path d="M19 12H5M12 19l-7-7 7-7" />
-                </svg>
-                Back to globe
-              </button>
-            ) : (
-              <>
-                {inExplore && panelOpen && (
-                  <button type="button" onClick={handleBack} style={backButtonStyle}>
-                    <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path d="M19 12H5M12 19l-7-7 7-7" />
-                    </svg>
-                    Back
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleExplore}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    padding: 0,
-                    cursor: "pointer",
-                  }}
-                  aria-label="Go to explore mode"
-                >
-                  <GodseyeLogo
-                    subtitle={inIntro ? "Prediction market intelligence" : undefined}
-                    size="sm"
-                  />
+            <>
+              {inExplore && panelOpen && (
+                <button type="button" onClick={handleBack} style={backButtonStyle}>
+                  <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path d="M19 12H5M12 19l-7-7 7-7" />
+                  </svg>
+                  Back
                 </button>
-              </>
-            )}
+              )}
+
+              <button
+                type="button"
+                onClick={handleExplore}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                }}
+                aria-label="Go to explore mode"
+              >
+                <GodseyeLogo
+                  subtitle={inIntro ? "Prediction market intelligence" : undefined}
+                  size="sm"
+                />
+              </button>
+            </>
           </div>
 
           {showTopChrome && (
@@ -413,15 +376,6 @@ export function GlobeHomePage({
           ref={filterBarRef}
           dimmed={dimFilterBar}
           onHoverChange={setFilterHovered}
-          style={
-            inTimeline
-              ? {
-                  top: 78,
-                  left: 118,
-                  maxWidth: "min(760px, calc(100vw - 470px))",
-                }
-              : undefined
-          }
         />
       )}
 
@@ -437,20 +391,8 @@ export function GlobeHomePage({
             onAutoSpinChange={setAutoSpinEnabled}
             showCountryBorders={showCountryBorders}
             onCountryBordersChange={setShowCountryBorders}
-            onTimelineSelect={handleEnterTimeline}
           />
         </>
-      )}
-
-      {inTimeline && (
-        <TimelineSlider
-          wide
-          style={{
-            left: 0,
-            right: 0,
-            bottom: 20,
-          }}
-        />
       )}
     </main>
   );
@@ -531,7 +473,7 @@ function IntroPanel({ onExplore }: { onExplore: () => void }) {
             letterSpacing: "-0.05em",
           }}
         >
-          GodSEye
+          GodsEye
         </h1>
 
         <p
@@ -671,7 +613,6 @@ const ControlsMenu = forwardRef<
     onAutoSpinChange: (enabled: boolean) => void;
     showCountryBorders: boolean;
     onCountryBordersChange: (enabled: boolean) => void;
-    onTimelineSelect: () => void;
   }
 >(function ControlsMenu(
   {
@@ -682,7 +623,6 @@ const ControlsMenu = forwardRef<
     onAutoSpinChange,
     showCountryBorders,
     onCountryBordersChange,
-    onTimelineSelect,
   },
   ref
 ) {
@@ -784,29 +724,6 @@ const ControlsMenu = forwardRef<
             />
           </div>
 
-          <button
-            type="button"
-            onClick={onTimelineSelect}
-            style={{
-              width: "100%",
-              marginTop: 12,
-              padding: "12px 14px",
-              borderRadius: 16,
-              border: "1px solid rgba(245,158,11,0.22)",
-              background: "rgba(245,158,11,0.08)",
-              color: "var(--accent)",
-              fontFamily: "var(--font-mono)",
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: "0.14em",
-              textTransform: "uppercase",
-              textAlign: "left",
-              cursor: "pointer",
-            }}
-          >
-            Open timeline view
-          </button>
-
           <div
             style={{
               marginTop: 14,
@@ -817,8 +734,8 @@ const ControlsMenu = forwardRef<
               color: "var(--text-secondary)",
             }}
           >
-            Drag to rotate, click a marker to analyse, and open timeline view for the
-            scrub-only historical layout.
+            Drag to rotate, click a marker to analyse it, and use the switches
+            here to tune the globe view.
           </div>
         </div>
       )}

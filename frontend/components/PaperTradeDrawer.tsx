@@ -21,6 +21,20 @@ interface PaperTradeDrawerProps {
 
 const PRESET_AMOUNTS = [10, 25, 50, 100];
 
+function RecommendationText({ text }: { text: string }) {
+  const parts = text.split("•").map((s) => s.trim()).filter(Boolean);
+  if (parts.length <= 1) {
+    return <p className="mt-4 text-sm leading-6 text-(--text-secondary)">{text}</p>;
+  }
+  return (
+    <div className="mt-4 space-y-3 text-sm leading-6 text-(--text-secondary)">
+      {parts.map((part, i) => (
+        <p key={i}>{i === 0 ? part : `• ${part}`}</p>
+      ))}
+    </div>
+  );
+}
+
 export function PaperTradeDrawer({
   open,
   onClose,
@@ -81,7 +95,10 @@ export function PaperTradeDrawer({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-[rgba(3,5,10,0.72)] backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-[rgba(3,5,10,0.72)] backdrop-blur-sm"
+      style={{ fontFamily: "var(--font-dm-sans), var(--font-sans)" }}
+    >
       <button
         type="button"
         aria-label="Close trade drawer"
@@ -91,7 +108,7 @@ export function PaperTradeDrawer({
       <aside className="relative h-full w-full max-w-md overflow-y-auto border-l border-white/10 bg-[rgba(7,10,18,0.97)] p-6 shadow-2xl">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <div className="eyebrow mb-2 text-[var(--accent)]">Trae this market</div>
+            <div className="eyebrow mb-2 text-[var(--accent)]">Trade this market</div>
             <h2 className="text-2xl font-semibold tracking-tight text-[var(--text-bright)]">
               Put the report into a position
             </h2>
@@ -99,14 +116,14 @@ export function PaperTradeDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="ui-mono rounded-full border border-white/12 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-white/25 hover:text-[var(--text-primary)]"
+            className="ui-mono border border-white/12 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-(--text-secondary) transition hover:border-white/25 hover:text-(--text-primary)"
           >
             Close
           </button>
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-[24px] border border-white/10 bg-[rgba(255,255,255,0.03)] p-4">
+          <div className="border border-white/10 bg-[rgba(255,255,255,0.03)] p-4">
             <div className="eyebrow mb-3">Signal</div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <Metric label="Market" value={formatPercent(marketProbability)} />
@@ -114,12 +131,10 @@ export function PaperTradeDrawer({
               <Metric label="Spread" value={spreadLabel} />
               <Metric label="Bias" value={simulationProbability >= marketProbability ? "YES" : "NO"} />
             </div>
-            <p className="mt-4 text-sm leading-6 text-[var(--text-secondary)]">
-              {recommendation}
-            </p>
+            <RecommendationText text={recommendation} />
           </div>
 
-          <div className="rounded-[24px] border border-white/10 bg-[rgba(255,255,255,0.03)] p-4">
+          <div className="border border-white/10 bg-[rgba(255,255,255,0.03)] p-4">
             <div className="eyebrow mb-3">Choose side</div>
             <div className="grid grid-cols-2 gap-3">
               {(["yes", "no"] as const).map((option) => {
@@ -131,7 +146,7 @@ export function PaperTradeDrawer({
                     type="button"
                     disabled={locked}
                     onClick={() => setSide(option)}
-                    className="rounded-[18px] border px-4 py-4 text-left transition disabled:cursor-not-allowed disabled:opacity-50"
+                    className="border px-4 py-4 text-left transition disabled:cursor-not-allowed disabled:opacity-50"
                     style={{
                       borderColor: active ? "rgba(245,158,11,0.4)" : "rgba(255,255,255,0.08)",
                       background: active ? "rgba(245,158,11,0.08)" : "rgba(255,255,255,0.02)",
@@ -149,21 +164,21 @@ export function PaperTradeDrawer({
             </div>
             {existingSide && (
               <p className="mt-3 text-xs leading-5 text-[var(--text-muted)]">
-                This analysis context is locked to your existing {existingSide.toUpperCase()} trae position.
+                This analysis context is locked to your existing {existingSide.toUpperCase()} trade position.
               </p>
             )}
           </div>
 
-          <div className="rounded-[24px] border border-white/10 bg-[rgba(255,255,255,0.03)] p-4">
+          <div className="border border-white/10 bg-[rgba(255,255,255,0.03)] p-4">
             <div className="eyebrow mb-3">Phantom approval</div>
-            <div className="rounded-[18px] border border-white/8 bg-[rgba(255,255,255,0.02)] px-4 py-4">
+            <div className="border border-white/8 bg-[rgba(255,255,255,0.02)] px-4 py-4">
               <div className="ui-mono text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
                 Wallet status
               </div>
-              <div className="mt-2 text-sm text-[var(--text-secondary)]">
+              <div className="mt-2 text-sm text-(--text-secondary)">
                 {connected && walletAddress
                   ? `Connected to ${wallet?.adapter.name ?? "wallet"}: ${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`
-                  : "Connect Phantom from the globe header before placing a trae."}
+                  : "Connect Phantom from the globe header before placing a trade."}
               </div>
               {connected && !walletSupportsSigning && (
                 <div className="mt-3 text-sm text-[var(--danger)]">
@@ -171,12 +186,12 @@ export function PaperTradeDrawer({
                 </div>
               )}
               <div className="mt-3 text-xs leading-5 text-[var(--text-muted)]">
-                Buying a trade position now requires a real Phantom message signature, but it still records only a trae in this app.
+                Buying a trade position now requires a real Phantom message signature, but it still records only a paper trade in this app.
               </div>
             </div>
           </div>
 
-          <div className="rounded-[24px] border border-white/10 bg-[rgba(255,255,255,0.03)] p-4">
+          <div className="border border-white/10 bg-[rgba(255,255,255,0.03)] p-4">
             <div className="eyebrow mb-3">Position size</div>
             <div className="mb-3 flex flex-wrap gap-2">
               {PRESET_AMOUNTS.map((amount) => (
@@ -184,7 +199,7 @@ export function PaperTradeDrawer({
                   key={amount}
                   type="button"
                   onClick={() => setAmountInput(String(amount))}
-                  className="ui-mono rounded-full border border-white/12 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                  className="ui-mono border border-white/12 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-(--text-secondary) transition hover:border-(--accent) hover:text-(--accent)"
                 >
                   ${amount}
                 </button>
@@ -198,7 +213,7 @@ export function PaperTradeDrawer({
                 step="1"
                 value={amountInput}
                 onChange={(event) => setAmountInput(event.target.value)}
-                className="w-full rounded-[16px] border border-white/10 bg-[rgba(4,6,12,0.88)] px-4 py-3 text-base text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
+                className="w-full border border-white/10 bg-[rgba(4,6,12,0.88)] px-4 py-3 text-base text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
               />
             </label>
 
@@ -208,7 +223,7 @@ export function PaperTradeDrawer({
             </div>
 
             {error && (
-              <div className="mt-4 rounded-[16px] border border-[rgba(239,68,68,0.24)] bg-[rgba(239,68,68,0.08)] px-4 py-3 text-sm text-[var(--danger)]">
+              <div className="mt-4 border border-[rgba(239,68,68,0.24)] bg-[rgba(239,68,68,0.08)] px-4 py-3 text-sm text-[var(--danger)]">
                 {error}
               </div>
             )}
@@ -227,13 +242,13 @@ export function PaperTradeDrawer({
               onClick={async () => {
                 setError(null);
                 if (!connected || !walletAddress || !walletSupportsSigning || !signMessage) {
-                  setError("Connect Phantom and allow message signing before placing a trae order.");
+                  setError("Connect Phantom and allow message signing before placing a trade order.");
                   return;
                 }
 
                 try {
                   const signedMessage = [
-                    "GodSEye trae approval",
+                    "GodsEye trade approval",
                     `Market: ${marketId}`,
                     reportId ? `Report: ${reportId}` : null,
                     simulationId ? `Simulation: ${simulationId}` : null,
@@ -263,7 +278,7 @@ export function PaperTradeDrawer({
                   setError("Phantom signature was rejected or could not be completed.");
                 }
               }}
-              className="ui-mono mt-5 w-full rounded-full border border-[rgba(245,158,11,0.32)] bg-[rgba(245,158,11,0.1)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)] transition hover:bg-[rgba(245,158,11,0.16)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="ui-mono mt-5 w-full border border-[rgba(245,158,11,0.32)] bg-[rgba(245,158,11,0.1)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)] transition hover:bg-[rgba(245,158,11,0.16)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {mutation.isPending
                 ? "Waiting for signature..."
@@ -272,19 +287,19 @@ export function PaperTradeDrawer({
           </div>
 
           {paperTrading.trades.length > 0 && (
-            <div className="rounded-[24px] border border-white/10 bg-[rgba(255,255,255,0.03)] p-4">
+            <div className="border border-white/10 bg-[rgba(255,255,255,0.03)] p-4">
               <div className="eyebrow mb-3">Recent orders</div>
               <div className="space-y-3">
                 {paperTrading.trades.slice(0, 5).map((trade) => (
                   <div
                     key={trade.id}
-                    className="flex items-center justify-between rounded-[16px] border border-white/8 bg-[rgba(255,255,255,0.02)] px-4 py-3"
+                    className="flex items-center justify-between border border-white/8 bg-[rgba(255,255,255,0.02)] px-4 py-3"
                   >
                     <div>
                       <div className="ui-mono text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
                         Buy {trade.side}
                       </div>
-                      <div className="mt-1 text-sm text-[var(--text-secondary)]">
+                      <div className="mt-1 text-sm text-(--text-secondary)">
                         {new Date(trade.created_at).toLocaleString()}
                       </div>
                       {trade.wallet_address && (
@@ -314,7 +329,7 @@ export function PaperTradeDrawer({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[16px] border border-white/8 bg-[rgba(255,255,255,0.02)] px-3 py-3">
+    <div className="border border-white/8 bg-[rgba(255,255,255,0.02)] px-3 py-3">
       <div className="eyebrow mb-1">{label}</div>
       <div className="text-sm font-semibold text-[var(--text-bright)]">{value}</div>
     </div>

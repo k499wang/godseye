@@ -54,7 +54,7 @@ export function BeliefChart({
   }
 
   return (
-    <div className="h-full w-full rounded-[24px] border border-[#e2e8f0] bg-[#f8fafc] p-2">
+    <div className="h-full w-full border border-[#e2e8f0] bg-[#f8fafc] p-2">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart
           data={data}

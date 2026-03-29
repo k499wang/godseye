@@ -25,7 +25,7 @@ class MarketBrowseItem(BaseModel):
     image: str | None
     volume: float
     volume24hr: float
-    probability: float | None  # None for multi-outcome events
+    probability: float | None  # top implied probability when available
     lat: float = 0.0
     lng: float = 0.0
     region: str = "Global"

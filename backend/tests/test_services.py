@@ -17,6 +17,7 @@ from app.models.market import Market  # noqa: E402
 from app.schemas.simulation import ProfessionalBackground  # noqa: E402
 from app.services.apollo_service import ApolloService  # noqa: E402
 from app.services.claims_generator import ClaimsGeneratorService  # noqa: E402
+from app.services.polymarket_client import PolymarketClient  # noqa: E402
 
 
 class FakeScalarResult:
@@ -241,6 +242,51 @@ class ApolloServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(profiles[0].apollo_enriched)
         self.assertFalse(profiles[1].apollo_enriched)
         fallback_mock.assert_awaited_once()
+
+
+class PolymarketClientTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.client = PolymarketClient()
+
+    def test_extract_event_probability_uses_single_market_price(self) -> None:
+        probability = self.client._extract_event_probability(
+            {
+                "markets": [
+                    {
+                        "outcomePrices": '["0.61", "0.39"]',
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(probability, 0.61)
+
+    def test_extract_event_probability_uses_top_market_for_multi_outcome_event(self) -> None:
+        probability = self.client._extract_event_probability(
+            {
+                "markets": [
+                    {
+                        "question": "Brazil",
+                        "outcomePrices": '["0.18", "0.82"]',
+                    },
+                    {
+                        "question": "France",
+                        "outcomePrices": ["0.24", "0.76"],
+                    },
+                    {
+                        "question": "Spain",
+                        "yesPrice": "0.15",
+                    },
+                ]
+            }
+        )
+
+        self.assertEqual(probability, 0.24)
+
+    def test_extract_market_probability_value_converts_percent_style_payloads(self) -> None:
+        probability = self.client._extract_market_probability_value({"probability": 62})
+
+        self.assertEqual(probability, 0.62)
 
 
 if __name__ == "__main__":

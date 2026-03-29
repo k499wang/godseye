@@ -78,7 +78,7 @@ function ExpandableLine({
 function ImpactChip({ label, color }: { label: string; color: string }) {
   return (
     <span
-      className="ui-mono rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]"
+      className="ui-mono px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]"
       style={{ color, background: "rgba(255,255,255,0.05)" }}
     >
       {label}
@@ -95,7 +95,7 @@ export function AgentDebateFeed({
 }: AgentDebateFeedProps) {
   if (!tickSnapshot) {
     return (
-      <div className="flex h-full items-center justify-center rounded-[20px] bg-[#f8fafc]">
+      <div className="flex h-full items-center justify-center bg-[#f8fafc]">
         <p className="ui-mono text-[11px] uppercase tracking-[0.16em] text-[#94a3b8]">Select a tick to view interactions</p>
       </div>
     );
@@ -194,7 +194,7 @@ export function AgentDebateFeed({
             return (
               <div
                 key={ex.id}
-                className="space-y-1.5 rounded-[22px] px-3 py-3"
+                className="space-y-1.5 px-3 py-3"
                 style={{
                   background: ex.involvesSelectedAgent ? "#fff7ed" : "transparent",
                   border: ex.involvesSelectedAgent
@@ -224,13 +224,13 @@ export function AgentDebateFeed({
                   </div>
 
                   <div
-                    className="rounded-[18px] px-4 py-3.5"
+                    className="px-4 py-3.5"
                     style={{
                       background: `${speakerColor}12`,
                       borderLeft: `2px solid ${speakerColor}66`,
                     }}
                   >
-                    <div className="mb-2 rounded-[12px] bg-white/80 px-3 py-2">
+                    <div className="mb-2 bg-white/80 px-3 py-2">
                       <div className="ui-mono mb-1 text-[9px] uppercase tracking-[0.16em] text-[#94a3b8]">
                         claim
                       </div>
@@ -266,7 +266,7 @@ export function AgentDebateFeed({
                 {/* Listener response */}
                 <div>
                   <div
-                    className="rounded-[18px] px-4 py-3.5"
+                    className="px-4 py-3.5"
                     style={{
                       background: "#f8fafc",
                       borderRight: `2px solid ${listenerColor}55`,
@@ -323,7 +323,7 @@ export function AgentDebateFeed({
         </div>
       ) : (
         <div className="space-y-5">
-          <div className="rounded-[24px] bg-[#f8fafc] px-5 py-4">
+          <div className="bg-[#f8fafc] px-5 py-4">
             <div className="ui-mono mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#64748b]">Quiet tick</div>
             <div className="text-[13px] leading-6 text-[#64748b]">
               No direct claim exchanges this round. Agents updated beliefs independently.
@@ -333,7 +333,7 @@ export function AgentDebateFeed({
           {fallbackMoments.map((moment) => {
             const color = ARCHETYPE_COLORS[moment.archetype] ?? "#fff";
             return (
-              <div key={moment.id} className="rounded-[22px] bg-[#f8fafc] px-5 py-4">
+              <div key={moment.id} className="bg-[#f8fafc] px-5 py-4">
                 <div className="mb-3 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
                     <span
@@ -355,7 +355,7 @@ export function AgentDebateFeed({
                   </div>
                 </div>
                 <div
-                  className="rounded-[14px] px-4 py-3 text-[var(--text-secondary)]"
+                  className="px-4 py-3 text-[var(--text-secondary)]"
                   style={{ background: `${color}0a`, borderLeft: `2px solid ${color}33` }}
                 >
                   <ExpandableLine text={moment.reasoning || "No spoken reaction captured."} collapsedChars={170} />

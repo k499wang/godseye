@@ -15,7 +15,7 @@ export interface GlobeEvent {
   region: string;
   question: string;
   marketUrl: string;
-  probability: number | null; // 0–1, null hides market signal section
+  probability: number | null; // 0–1 implied probability from Polymarket
   lat: number;
   lng: number;
   category: GlobeEventCategory;
@@ -27,7 +27,7 @@ export interface GlobeEvent {
   isImported: boolean;
   volume?: number; // USD, optional
   image_url?: string | null;
-  confidence_score?: number; // 0–1, defaults to 0.5
+  confidence_score?: number; // 0–1, falls back to live market probability
   start_time?: string; // ISO date string for timeline filtering
 }
 
@@ -77,7 +77,7 @@ export function browseItemToGlobeEvent(item: MarketBrowseItem): GlobeEvent {
     isImported: item.is_imported,
     volume: item.volume,
     image_url: item.image ?? null,
-    confidence_score: 0.5,
+    confidence_score: item.probability ?? undefined,
   };
 }
 

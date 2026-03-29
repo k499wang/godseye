@@ -252,6 +252,58 @@ class PolymarketClient:
                 return max(volume, Decimal("0"))
         return Decimal("0")
 
+    def _extract_market_probability_value(self, payload: dict[str, Any]) -> float | None:
+        direct_probability = payload.get("current_probability")
+        if direct_probability is None:
+            direct_probability = payload.get("probability")
+
+        if direct_probability is not None:
+            probability = float(_coerce_decimal(direct_probability))
+        else:
+            outcome_prices = payload.get("outcomePrices")
+            if isinstance(outcome_prices, str):
+                try:
+                    outcome_prices = json.loads(outcome_prices)
+                except json.JSONDecodeError:
+                    outcome_prices = None
+
+            if isinstance(outcome_prices, list) and outcome_prices:
+                probability = float(_coerce_decimal(outcome_prices[0]))
+            else:
+                yes_price = payload.get("yes_price")
+                if yes_price is None:
+                    yes_price = payload.get("yesPrice")
+                if yes_price is None:
+                    return None
+                probability = float(_coerce_decimal(yes_price))
+
+        if probability > 1.0:
+            probability /= 100.0
+        if 0.0 <= probability <= 1.0:
+            return probability
+        return None
+
+    def _extract_event_probability(self, payload: dict[str, Any]) -> float | None:
+        markets = payload.get("markets")
+        if not isinstance(markets, list) or not markets:
+            return None
+
+        probabilities = [
+            probability
+            for market in markets
+            if isinstance(market, dict)
+            for probability in [self._extract_market_probability_value(market)]
+            if probability is not None
+        ]
+
+        if not probabilities:
+            return None
+
+        # For multi-outcome events, surface the favorite's implied probability
+        # so the browse UI reflects a live Polymarket number instead of a
+        # placeholder.
+        return max(probabilities)
+
     @staticmethod
     def _coerce_bool(value: Any) -> bool | None:
         if isinstance(value, bool):
@@ -327,22 +379,7 @@ class PolymarketClient:
                     if tag_slug and tag_slug not in tag_slugs:
                         tag_slugs.append(tag_slug)
 
-            # Probability: only meaningful for binary (single Yes/No) markets
-            probability: float | None = None
-            markets = event.get("markets")
-            if isinstance(markets, list) and len(markets) == 1:
-                m = markets[0]
-                if isinstance(m, dict):
-                    outcome_prices = m.get("outcomePrices")
-                    if isinstance(outcome_prices, str):
-                        try:
-                            outcome_prices = json.loads(outcome_prices)
-                        except json.JSONDecodeError:
-                            outcome_prices = None
-                    if isinstance(outcome_prices, list) and outcome_prices:
-                        p = float(_coerce_decimal(outcome_prices[0]))
-                        if 0.0 <= p <= 1.0:
-                            probability = p
+            probability = self._extract_event_probability(event)
 
             results.append({
                 "slug": slug,

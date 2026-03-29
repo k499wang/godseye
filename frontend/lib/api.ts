@@ -20,6 +20,14 @@ type SimulationRequestOptions = {
   demo?: boolean;
 };
 
+export interface PolymarketQuoteResponse {
+  slug: string;
+  probability: number | null;
+  source: "market" | "event";
+}
+
+const polymarketQuoteCache = new Map<string, PolymarketQuoteResponse>();
+
 export async function importMarket(url: string): Promise<MarketResponse> {
   const res = await client.post<MarketResponse>("/api/markets/import", { url });
   return res.data;
@@ -92,4 +100,23 @@ export async function browseMarkets(): Promise<MarketBrowseResponse> {
 export async function refreshMarkets(): Promise<MarketBrowseResponse> {
   const res = await client.post<MarketBrowseResponse>("/api/markets/refresh");
   return res.data;
+}
+
+export async function getPolymarketQuote(
+  url: string
+): Promise<PolymarketQuoteResponse> {
+  const cached = polymarketQuoteCache.get(url);
+  if (cached) return cached;
+
+  const res = await fetch(`/api/polymarket/quote?url=${encodeURIComponent(url)}`, {
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new Error("Could not fetch live Polymarket probability.");
+  }
+
+  const data = (await res.json()) as PolymarketQuoteResponse;
+  polymarketQuoteCache.set(url, data);
+  return data;
 }

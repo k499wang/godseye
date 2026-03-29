@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties, type Rea
 import { useRouter } from "next/navigation";
 import { useGlobe } from "./GlobeContext";
 import { CATEGORY_COLOR } from "@/lib/globeData";
-import { buildWorld, generateClaims, importMarket } from "@/lib/api";
+import { buildWorld, generateClaims, getPolymarketQuote, importMarket } from "@/lib/api";
 
 export function EventPanel() {
   const {
@@ -20,11 +20,14 @@ export function EventPanel() {
   const [isActionPending, setIsActionPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [liveProbability, setLiveProbability] = useState<number | null | undefined>(undefined);
+  const [isResolvingLiveProbability, setIsResolvingLiveProbability] = useState(false);
 
   const event = events.find((entry) => entry.id === selectedEventId) ?? null;
   const isOpen = !!selectedEventId;
   const color = event ? CATEGORY_COLOR[event.category] : "#f59e0b";
-  const confidence = event?.confidence_score ?? 0.5;
+  const probability = event?.probability ?? liveProbability ?? null;
+  const confidence = event?.confidence_score ?? probability;
 
   const close = useCallback(() => {
     setSelectedEventId(null);
@@ -48,6 +51,39 @@ export function EventPanel() {
   useEffect(() => {
     setIsDemoMode(false);
   }, [selectedEventId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setLiveProbability(undefined);
+    setIsResolvingLiveProbability(false);
+
+    if (!event?.marketUrl) return;
+    if (event.confidence_score != null || event.probability != null) return;
+
+    setIsResolvingLiveProbability(true);
+
+    void getPolymarketQuote(event.marketUrl)
+      .then((quote) => {
+        if (!cancelled) {
+          setLiveProbability(quote.probability);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLiveProbability(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsResolvingLiveProbability(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [event?.confidence_score, event?.marketUrl, event?.probability]);
 
   const primaryActionLabel = useMemo(() => {
     if (!event) return "";
@@ -274,46 +310,65 @@ export function EventPanel() {
               </div>
 
               <PanelSection label="Confidence">
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
-                  <div
-                    style={{
-                      flex: 1,
-                      height: 8,
-                      borderRadius: 999,
-                      background: "rgba(255,255,255,0.08)",
-                      overflow: "hidden",
-                    }}
-                  >
+                {confidence != null ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
                     <div
                       style={{
-                        height: "100%",
-                        width: `${Math.round(confidence * 100)}%`,
+                        flex: 1,
+                        height: 8,
                         borderRadius: 999,
-                        background:
+                        background: "rgba(255,255,255,0.08)",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${Math.round(confidence * 100)}%`,
+                          borderRadius: 999,
+                          background:
+                            confidence >= 0.75
+                              ? "var(--success)"
+                              : confidence >= 0.55
+                                ? "var(--accent)"
+                                : "var(--danger)",
+                        }}
+                      />
+                    </div>
+                    <span
+                      className="ui-mono"
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color:
                           confidence >= 0.75
                             ? "var(--success)"
                             : confidence >= 0.55
                               ? "var(--accent)"
                               : "var(--danger)",
                       }}
-                    />
+                    >
+                      {Math.round(confidence * 100)}%
+                    </span>
                   </div>
-                  <span
+                ) : (
+                  <div
                     className="ui-mono"
                     style={{
-                      fontSize: 13,
-                      fontWeight: 700,
-                      color:
-                        confidence >= 0.75
-                          ? "var(--success)"
-                          : confidence >= 0.55
-                            ? "var(--accent)"
-                            : "var(--danger)",
+                      marginTop: 8,
+                      fontSize: 12,
+                      letterSpacing: "0.12em",
+                      textTransform: "uppercase",
+                      color: isResolvingLiveProbability
+                        ? "var(--text-muted)"
+                        : "var(--danger)",
                     }}
                   >
-                    {Math.round(confidence * 100)}%
-                  </span>
-                </div>
+                    {isResolvingLiveProbability
+                      ? "Fetching live Polymarket probability"
+                      : "Live probability unavailable"}
+                  </div>
+                )}
               </PanelSection>
 
               {!event.simulationId && (
@@ -394,7 +449,7 @@ export function EventPanel() {
                 </PanelSection>
               )}
 
-              {event.probability != null && (
+              {probability != null && (
                 <PanelSection label="Market signal">
                   <div
                     style={{
@@ -406,7 +461,7 @@ export function EventPanel() {
                     }}
                   >
                     <span>Current probability</span>
-                    <span style={{ color, fontWeight: 700 }}>{Math.round(event.probability * 100)}%</span>
+                    <span style={{ color, fontWeight: 700 }}>{Math.round(probability * 100)}%</span>
                   </div>
                   <div
                     style={{
@@ -415,14 +470,14 @@ export function EventPanel() {
                       background: "rgba(255,255,255,0.08)",
                       overflow: "hidden",
                     }}
-                  >
-                    <div
-                      style={{
-                        height: "100%",
-                        width: `${event.probability * 100}%`,
-                        background: color,
-                        borderRadius: 999,
-                      }}
+                    >
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${probability * 100}%`,
+                          background: color,
+                          borderRadius: 999,
+                        }}
                     />
                   </div>
                   {event.volume && (

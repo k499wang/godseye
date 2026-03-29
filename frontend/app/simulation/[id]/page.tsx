@@ -146,7 +146,7 @@ export default function SimulationPage({
           <div className="eyebrow mb-4 text-[var(--danger)]">Simulation not found</div>
           <button
             onClick={() => router.push(backHref)}
-            className="ui-mono rounded-full border border-white/12 px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            className="ui-mono border border-white/12 px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
           >
             Back home
           </button>
@@ -173,13 +173,13 @@ export default function SimulationPage({
         <div className="flex items-center gap-4">
           <button
             onClick={() => router.push(backHref)}
-            className="ui-mono rounded-full border border-white/12 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            className="ui-mono border border-white/12 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
           >
             Back
           </button>
           <button
             onClick={() => router.push("/?mode=explore")}
-            className="rounded-full border border-white/12 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            className="border border-white/12 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
           >
             <GodseyeLogo size="sm" />
           </button>
@@ -192,7 +192,7 @@ export default function SimulationPage({
         </div>
 
         {statusLabel && (
-          <div className="ui-mono rounded-full border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.08)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+          <div className="ui-mono border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.08)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
             {statusLabel}
           </div>
         )}
@@ -207,7 +207,7 @@ export default function SimulationPage({
                     : `/reports/${simulation.id}?trade=1`
                 )
               }
-              className="ui-mono rounded-full border border-white/12 px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              className="ui-mono border border-white/12 px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
             >
               Trade
             </button>
@@ -219,7 +219,7 @@ export default function SimulationPage({
                     : `/reports/${simulation.id}`
                 )
               }
-              className="ui-mono rounded-full border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.08)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)] transition hover:bg-[rgba(245,158,11,0.14)]"
+              className="ui-mono border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.08)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)] transition hover:bg-[rgba(245,158,11,0.14)]"
             >
               View report
             </button>
@@ -284,13 +284,13 @@ function SimulationLoadState({
           : "Generating first tick";
 
   return (
-    <div className="w-full max-w-[74rem] rounded-[26px] border border-white/6 bg-[rgba(10,14,22,0.92)] shadow-[0_16px_44px_rgba(0,0,0,0.16)]">
+    <div className="w-full max-w-[74rem] border border-white/6 bg-[rgba(10,14,22,0.92)] shadow-[0_16px_44px_rgba(0,0,0,0.16)]">
       <div className="grid min-h-[560px] grid-cols-[1.25fr_0.95fr]">
         <div className="flex flex-col justify-between border-r border-white/6 p-8">
           <div>
             <div className="mb-6 flex items-center gap-3">
               <GodseyeLogo size="sm" />
-              <div className="ui-mono rounded-full border border-[rgba(245,158,11,0.2)] bg-[rgba(245,158,11,0.06)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
+              <div className="ui-mono border border-[rgba(245,158,11,0.2)] bg-[rgba(245,158,11,0.06)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
                 {statusLabel}
               </div>
             </div>
@@ -333,7 +333,7 @@ function SimulationLoadState({
               return (
                 <div
                   key={step.label}
-                  className="rounded-[18px] border px-4 py-3 transition-all duration-500"
+                  className="border px-4 py-3 transition-all duration-500"
                   style={{
                     borderColor:
                       state === "done"
@@ -351,7 +351,7 @@ function SimulationLoadState({
                 >
                   <div className="mb-1.5 flex items-center gap-3">
                     <div
-                      className="flex h-7 w-7 items-center justify-center rounded-full border ui-mono text-[10px] font-bold"
+                      className="flex h-7 w-7 items-center justify-center border ui-mono text-[10px] font-bold"
                       style={{
                         borderColor:
                           state === "done"
@@ -390,7 +390,7 @@ function SimulationLoadState({
             })}
           </div>
 
-          <div className="mt-6 rounded-[18px] border border-white/6 bg-[rgba(255,255,255,0.018)] p-4">
+          <div className="mt-6 border border-white/6 bg-[rgba(255,255,255,0.018)] p-4">
             <div className="ui-mono mb-2 text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
               Live context
             </div>

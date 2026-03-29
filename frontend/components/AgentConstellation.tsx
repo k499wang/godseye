@@ -67,6 +67,14 @@ function clip(text: string, limit: number): string {
     : normalized;
 }
 
+function estimatedTextWidth(
+  text: string,
+  fontSize: number,
+  minWidth: number,
+): number {
+  return Math.max(minWidth, text.length * fontSize * 0.64);
+}
+
 function sameNodeLayout(
   previousNodes: GraphNode[],
   nextNodes: GraphNode[],
@@ -184,6 +192,8 @@ export function AgentConstellation({
   });
   const [transitionProgress, setTransitionProgress] = useState(1);
   const [edgeMode, setEdgeMode] = useState<"both" | "share" | "trust">("both");
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [hoveredTrustLinkId, setHoveredTrustLinkId] = useState<string | null>(null);
 
   // Supabase-sourced trust scores remain a fallback until the API exposes a
   // tick-by-tick trust history derived from the DB.
@@ -685,9 +695,15 @@ export function AgentConstellation({
     return lines;
   }, []);
 
+  const sortedNodes = hoveredNodeId
+    ? [...animatedNodes].sort((a, b) =>
+        a.id === hoveredNodeId ? 1 : b.id === hoveredNodeId ? -1 : 0,
+      )
+    : animatedNodes;
+
   if (!agents.length) {
     return (
-      <div className="flex min-h-[520px] items-center justify-center rounded-[28px] border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)]">
+      <div className="flex min-h-[520px] items-center justify-center border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)]">
         <div className="ui-mono text-[11px] uppercase tracking-[0.18em] text-[var(--text-subtle)]">
           No agents loaded
         </div>
@@ -696,10 +712,10 @@ export function AgentConstellation({
   }
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#0c0e14] p-2">
+    <div className="border border-white/10 bg-[#0c0e14] p-2">
       <div
         ref={containerRef}
-        className="relative overflow-hidden rounded-xl bg-[#0a0c12]"
+        className="relative overflow-hidden bg-[#0a0c12]"
       >
         <svg
           width="100%"
@@ -707,6 +723,29 @@ export function AgentConstellation({
           viewBox={`0 0 ${SCENE_W} ${SCENE_H}`}
           className="block"
         >
+          <defs>
+            <linearGradient
+              id="agent-label-highlight"
+              x1="0%"
+              y1="0%"
+              x2="0%"
+              y2="100%"
+            >
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.16" />
+              <stop offset="45%" stopColor="#ffffff" stopOpacity="0.06" />
+              <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+            </linearGradient>
+            <filter
+              id="agent-label-glow"
+              x="-50%"
+              y="-50%"
+              width="200%"
+              height="200%"
+            >
+              <feGaussianBlur stdDeviation="8" />
+            </filter>
+          </defs>
+
           {/* Dot grid background */}
           <g opacity="0.12">
             {gridLines.map((line, i) => (
@@ -736,7 +775,6 @@ export function AgentConstellation({
 
               const isShare = link.kind === "share";
               const isAmbient = link.kind === "ambient";
-              const labelPos = labelPosition(link);
               const metrics = curveMetrics(link);
 
               return (
@@ -781,68 +819,97 @@ export function AgentConstellation({
                     strokeDasharray={isAmbient ? "6 4" : undefined}
                     strokeLinecap="round"
                   />
-                  {/* Edge label - trust and share edges only (no labels on ambient) */}
-                  {!isAmbient &&
-                    labelPos &&
-                    link.kind === "trust" &&
-                    link.label && (
-                      <g transform={`translate(${labelPos.x}, ${labelPos.y})`}>
-                        {(() => {
-                          const text = link.label;
-                          const textWidth = Math.max(60, text.length * 6);
-                          return (
-                            <>
-                              <rect
-                                x={-(textWidth / 2) - 6}
-                                y="-12"
-                                width={textWidth + 12}
-                                height="24"
-                                rx="4"
-                                fill="#0f172a"
-                                stroke={
-                                  isShare
-                                    ? link.isHighlighted
-                                      ? "rgba(245,158,11,0.5)"
-                                      : "rgba(245,158,11,0.25)"
-                                    : link.isHighlighted
-                                      ? "#475569"
-                                      : "#1e293b"
-                                }
-                                strokeWidth="1"
-                              />
-                              <text
-                                textAnchor="middle"
-                                dominantBaseline="central"
-                                fontSize={isShare ? "10" : "9"}
-                                fontFamily="var(--font-mono)"
-                                fill={isShare ? "#e2e8f0" : "#94a3b8"}
-                              >
-                                {text}
-                              </text>
-                            </>
-                          );
-                        })()}
-                      </g>
-                    )}
                 </g>
               );
             })}
           </g>
 
-          {/* Nodes */}
+          {/* Trust labels — rendered before nodes so agent names appear on top by default */}
           <g>
-            {animatedNodes.map((node) => {
+            {renderedLinks.map((link) => {
+              if (link.kind !== "trust" || !link.label) return null;
+              if (link.id === hoveredTrustLinkId) return null;
+
+              const labelPos = labelPosition(link);
+              if (!labelPos) return null;
+              const textWidth = Math.max(60, link.label.length * 6);
+
+              return (
+                <g
+                  key={`trust-label-${link.id}`}
+                  transform={`translate(${labelPos.x}, ${labelPos.y})`}
+                  style={{ cursor: "default" }}
+                  onMouseEnter={() => setHoveredTrustLinkId(link.id)}
+                  onMouseLeave={() => setHoveredTrustLinkId(null)}
+                >
+                  <rect
+                    x={-(textWidth / 2) - 6}
+                    y="-12"
+                    width={textWidth + 12}
+                    height="24"
+                    rx="6"
+                    fill="#0f172a"
+                    fillOpacity={0.94}
+                    stroke={link.isHighlighted ? "#475569" : "#1e293b"}
+                    strokeWidth="1"
+                  />
+                  <rect
+                    x={-(textWidth / 2) - 6}
+                    y="-12"
+                    width={textWidth + 12}
+                    height="24"
+                    rx="6"
+                    fill="url(#agent-label-highlight)"
+                    opacity={0.55}
+                  />
+                  <text
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize="9"
+                    fontFamily="var(--font-mono)"
+                    fill="#cbd5e1"
+                    stroke="rgba(2,6,23,0.95)"
+                    strokeWidth="2"
+                    paintOrder="stroke"
+                    strokeLinejoin="round"
+                    pointerEvents="none"
+                  >
+                    {link.label}
+                  </text>
+                </g>
+              );
+            })}
+          </g>
+
+          {/* Nodes — rendered after trust labels so names are on top by default.
+              Hovered node is sorted last so it appears above siblings. */}
+          <g>
+            {sortedNodes.map((node) => {
               const nodeColor = ARCHETYPE_COLORS[node.archetype] ?? "#64748b";
               const label = shortName(node.name);
+              const archetypeLabel = (
+                ARCHETYPE_LABELS[node.archetype]?.split(" ")[0] ?? node.archetype
+              ).toUpperCase();
               const nodeX = node.x ?? SCENE_W / 2;
               const nodeY = node.y ?? SCENE_H / 2;
               const nodeRadius = node.isSelected ? 34 : node.isActive ? 28 : 24;
+              const labelWidth =
+                Math.max(
+                  estimatedTextWidth(label, 13, 72),
+                  estimatedTextWidth(archetypeLabel, 10, 56),
+                ) + 26;
+              // Rect spans nodeRadius+6 to nodeRadius+40; center = nodeRadius+23
+              // Both texts use dominantBaseline="middle" so y is the visual center
+              const nameY = nodeRadius + 16;
+              const archetypeY = nodeRadius + 30;
 
               return (
                 <g
                   key={node.id}
                   transform={`translate(${nodeX}, ${nodeY})`}
                   onClick={() => onSelectAgent(node.id)}
+                  onMouseEnter={() => setHoveredNodeId(node.id)}
+                  onMouseLeave={() => setHoveredNodeId(null)}
                   style={{ cursor: "pointer" }}
                 >
                   {/* Selection ring */}
@@ -882,42 +949,139 @@ export function AgentConstellation({
                     fontWeight="700"
                     fontFamily="var(--font-mono)"
                     fill="#fff"
+                    pointerEvents="none"
                   >
                     {Math.round(node.belief * 100)}
                   </text>
-                  {/* Name label below node */}
+                  {/* Label backdrop */}
+                  <g pointerEvents="none">
+                    <ellipse
+                      cy={nodeRadius + 23}
+                      rx={labelWidth / 2}
+                      ry="19"
+                      fill={nodeColor}
+                      opacity={node.isSelected ? 0.14 : 0.09}
+                      filter="url(#agent-label-glow)"
+                    />
+                    <rect
+                      x={-(labelWidth / 2)}
+                      y={nodeRadius + 6}
+                      width={labelWidth}
+                      height="34"
+                      rx="17"
+                      fill="#020617"
+                      fillOpacity={0.82}
+                      stroke={
+                        node.isSelected
+                          ? `${nodeColor}99`
+                          : "rgba(148,163,184,0.18)"
+                      }
+                      strokeWidth="1"
+                    />
+                    <rect
+                      x={-(labelWidth / 2)}
+                      y={nodeRadius + 6}
+                      width={labelWidth}
+                      height="34"
+                      rx="17"
+                      fill="url(#agent-label-highlight)"
+                    />
+                  </g>
+                  {/* Name — centered in upper half of oval */}
                   <text
-                    y={nodeRadius + 16}
+                    y={nameY}
                     textAnchor="middle"
+                    dominantBaseline="middle"
                     fontSize="13"
                     fontWeight="600"
-                    fill="#e2e8f0"
+                    fill="#f8fafc"
+                    stroke="rgba(2,6,23,0.9)"
+                    strokeWidth="3"
+                    paintOrder="stroke"
+                    strokeLinejoin="round"
+                    pointerEvents="none"
                   >
                     {label}
                   </text>
-                  {/* Archetype label */}
+                  {/* Archetype — centered in lower half of oval */}
                   <text
-                    y={nodeRadius + 30}
+                    y={archetypeY}
                     textAnchor="middle"
+                    dominantBaseline="middle"
                     fontSize="10"
                     fontFamily="var(--font-mono)"
-                    fill="#64748b"
+                    fill="#94a3b8"
                     letterSpacing="0.08em"
+                    stroke="rgba(2,6,23,0.92)"
+                    strokeWidth="2.2"
+                    paintOrder="stroke"
+                    strokeLinejoin="round"
+                    pointerEvents="none"
                   >
-                    {(
-                      ARCHETYPE_LABELS[node.archetype]?.split(" ")[0] ??
-                      node.archetype
-                    ).toUpperCase()}
+                    {archetypeLabel}
                   </text>
                 </g>
               );
             })}
           </g>
+
+          {/* Hovered trust label — rendered last so it floats above everything */}
+          {hoveredTrustLinkId && (() => {
+            const link = renderedLinks.find((l) => l.id === hoveredTrustLinkId);
+            if (!link || link.kind !== "trust" || !link.label) return null;
+            const labelPos = labelPosition(link);
+            if (!labelPos) return null;
+            const textWidth = Math.max(60, link.label.length * 6);
+            return (
+              <g
+                key={`trust-label-hovered-${link.id}`}
+                transform={`translate(${labelPos.x}, ${labelPos.y})`}
+                style={{ cursor: "default" }}
+                onMouseEnter={() => setHoveredTrustLinkId(link.id)}
+                onMouseLeave={() => setHoveredTrustLinkId(null)}
+              >
+                <rect
+                  x={-(textWidth / 2) - 6}
+                  y="-12"
+                  width={textWidth + 12}
+                  height="24"
+                  rx="6"
+                  fill="#0f172a"
+                  fillOpacity={0.94}
+                  stroke={link.isHighlighted ? "#475569" : "#1e293b"}
+                  strokeWidth="1"
+                />
+                <rect
+                  x={-(textWidth / 2) - 6}
+                  y="-12"
+                  width={textWidth + 12}
+                  height="24"
+                  rx="6"
+                  fill="url(#agent-label-highlight)"
+                  opacity={0.55}
+                />
+                <text
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fontSize="9"
+                  fontFamily="var(--font-mono)"
+                  fill="#cbd5e1"
+                  stroke="rgba(2,6,23,0.95)"
+                  strokeWidth="2"
+                  paintOrder="stroke"
+                  strokeLinejoin="round"
+                  pointerEvents="none"
+                >
+                  {link.label}
+                </text>
+              </g>
+            );
+          })()}
         </svg>
 
         {/* Legend */}
         <div className="absolute left-4 top-4 flex flex-wrap items-center gap-2">
-          <div className="pointer-events-auto mr-2 flex items-center gap-1 rounded-md border border-white/8 bg-[#0f172a]/90 p-1">
+          <div className="pointer-events-auto mr-2 flex items-center gap-1 border border-white/8 bg-[#0f172a]/90 p-1">
             <EdgeModeButton
               label="Both"
               active={edgeMode === "both"}
@@ -941,7 +1105,7 @@ export function AgentConstellation({
 
         {/* Selected node detail panel */}
         {selectedNode && (
-          <div className="pointer-events-none absolute right-4 top-4 min-w-[260px] rounded-lg border border-white/10 bg-[#0f172a]/95 px-4 py-3 backdrop-blur-sm">
+          <div className="pointer-events-none absolute right-4 top-4 min-w-[260px] border border-white/10 bg-[#0f172a]/95 px-4 py-3 backdrop-blur-sm">
             <div className="mb-2 flex items-center gap-2">
               <span
                 className="h-3 w-3 rounded-full"
@@ -996,7 +1160,7 @@ function MiniStat({
   color: string;
 }) {
   return (
-    <div className="rounded-md border border-white/8 bg-white/3 px-2.5 py-2">
+    <div className="border border-white/8 bg-white/3 px-2.5 py-2">
       <div className="mb-0.5 ui-mono text-[9px] uppercase tracking-wider text-slate-500">
         {label}
       </div>
@@ -1017,7 +1181,7 @@ function LegendChip({
   dashed?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-1.5 rounded-md border border-white/8 bg-[#0f172a]/90 px-2.5 py-1">
+    <div className="flex items-center gap-1.5 border border-white/8 bg-[#0f172a]/90 px-2.5 py-1">
       <span
         className="block w-4"
         style={{

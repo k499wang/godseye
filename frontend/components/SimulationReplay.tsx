@@ -21,7 +21,7 @@ function StatusBadge({ status }: { status: string }) {
 
   return (
     <span
-      className="ui-mono inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em]"
+      className="ui-mono inline-flex items-center gap-2 border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em]"
       style={{ background: color.bg, color: color.text, borderColor: color.border }}
     >
       <span
@@ -113,7 +113,7 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
 
   return (
     <div className="mx-auto max-w-[1680px] px-6 py-8 text-[var(--text-primary)] md:px-8 xl:px-10">
-      <div className="mb-5 rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)] px-5 py-4 shadow-[0_20px_60px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+      <div className="mb-5 border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)] px-5 py-4 shadow-[0_20px_60px_rgba(0,0,0,0.28)] backdrop-blur-xl">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
             <span className="ui-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">
@@ -139,11 +139,11 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
         </div>
       </div>
 
-      <div className="mb-6 rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)] px-5 py-4 shadow-[0_16px_50px_rgba(0,0,0,0.24)] backdrop-blur-xl">
+      <div className="mb-6 border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)] px-5 py-4 shadow-[0_16px_50px_rgba(0,0,0,0.24)] backdrop-blur-xl">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button
-              className="rounded-full border border-[rgba(245,158,11,0.22)] bg-[rgba(245,158,11,0.08)] px-4 py-2 ui-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] transition hover:bg-[rgba(245,158,11,0.14)]"
+              className="border border-[rgba(245,158,11,0.22)] bg-[rgba(245,158,11,0.08)] px-4 py-2 ui-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] transition hover:bg-[rgba(245,158,11,0.14)]"
               onClick={() => {
                 const index = tickData.findIndex((snapshot) => snapshot.tick === currentTick);
                 if (index > 0) setCurrentTick(tickData[index - 1].tick);
@@ -151,14 +151,14 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
             >
               Prev
             </button>
-            <div className="rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-4 py-2">
+            <div className="border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-4 py-2">
               <span className="ui-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Tick </span>
               <span className="ui-mono text-[16px] font-bold text-[var(--accent)]">
                 {String(currentTick).padStart(2, "0")}
               </span>
             </div>
             <button
-              className="rounded-full border border-[rgba(245,158,11,0.22)] bg-[rgba(245,158,11,0.08)] px-4 py-2 ui-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] transition hover:bg-[rgba(245,158,11,0.14)]"
+              className="border border-[rgba(245,158,11,0.22)] bg-[rgba(245,158,11,0.08)] px-4 py-2 ui-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] transition hover:bg-[rgba(245,158,11,0.14)]"
               onClick={() => {
                 const index = tickData.findIndex((snapshot) => snapshot.tick === currentTick);
                 if (index < tickData.length - 1) setCurrentTick(tickData[index + 1].tick);
@@ -216,7 +216,7 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
       />
 
       {selectedAgent && selectedAgentState && (
-        <div className="mt-6 rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)] px-5 py-4 shadow-[0_14px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl">
+        <div className="mt-6 border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)] px-5 py-4 shadow-[0_14px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div className="min-w-[260px] flex-1">
               <div className="flex items-center gap-3">
@@ -242,7 +242,7 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
                 <MetricCard label="Mode" value={selectedAgentState.action_taken === "share_claim" ? "Share claim" : "Update belief"} />
               </div>
 
-              <div className="mt-4 rounded-[20px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] p-4">
+              <div className="mt-4 border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] p-4">
                 <div className="ui-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-subtle)]">
                   Current reasoning
                 </div>
@@ -293,7 +293,7 @@ function MetricInline({ label, value, color }: { label: string; value: string; c
 
 function MetricCard({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="rounded-[18px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-4 py-3">
+    <div className="border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-4 py-3">
       <div className="ui-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-subtle)]">{label}</div>
       <div className="mt-1 text-[18px] font-semibold" style={{ color: color ?? "var(--text-bright)" }}>
         {value}
@@ -311,7 +311,7 @@ function ClaimShareList({
 }) {
   if (shares.length === 0) {
     return (
-      <div className="rounded-[20px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] p-4 text-[13px] text-[var(--text-subtle)]">
+      <div className="border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] p-4 text-[13px] text-[var(--text-subtle)]">
         No claims {direction} on this tick.
       </div>
     );

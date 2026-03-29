@@ -8,7 +8,7 @@
   --accent-dim: rgba(245, 158, 11, 0.14);
   --border: rgba(255, 255, 255, 0.08);
   --font-mono: "JetBrains Mono", "IBM Plex Mono", "Consolas", "SFMono-Regular", monospace;
-  --font-sans: "Aptos", "Segoe UI Variable Display", "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-sans: var(--font-dm-sans), "DM Sans", "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-display: "Aptos Display", "Segoe UI Variable Display", "Aptos", "Inter", "Segoe UI", sans-serif;
 
   /* Overlay system variables */
@@ -115,7 +115,6 @@ body::after {
 .surface-card {
   background: linear-gradient(180deg, rgba(18, 23, 34, 0.96) 0%, rgba(11, 15, 24, 0.98) 100%);
   border: 1px solid var(--border);
-  border-radius: 28px;
   box-shadow: var(--card-shadow);
 }
 
