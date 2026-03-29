@@ -102,6 +102,14 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
       : selectedAgent && selectedAgentState
         ? selectedAgentState.belief - selectedAgent.initial_belief
         : 0;
+  const selectedAgentSentShares =
+    selectedAgent && currentSnapshot
+      ? currentSnapshot.claim_shares.filter((share) => share.from_agent_id === selectedAgent.id)
+      : [];
+  const selectedAgentReceivedShares =
+    selectedAgent && currentSnapshot
+      ? currentSnapshot.claim_shares.filter((share) => share.to_agent_id === selectedAgent.id)
+      : [];
 
   return (
     <div className="mx-auto max-w-[1680px] px-6 py-8 text-[var(--text-primary)] md:px-8 xl:px-10">
@@ -209,31 +217,61 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
 
       {selectedAgent && selectedAgentState && (
         <div className="mt-6 rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)] px-5 py-4 shadow-[0_14px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <span
-                className="h-3 w-3 rounded-full"
-                style={{ background: ARCHETYPE_COLORS[selectedAgent.archetype] ?? "#0f172a" }}
-              />
-              <div>
-                <div className="text-[17px] font-semibold text-[var(--text-bright)]">{selectedAgent.name}</div>
-                <div
-                  className="ui-mono text-[10px] uppercase tracking-[0.16em]"
-                  style={{ color: ARCHETYPE_COLORS[selectedAgent.archetype] ?? "var(--text-muted)" }}
-                >
-                  {ARCHETYPE_LABELS[selectedAgent.archetype]}
+          <div className="flex flex-wrap items-start justify-between gap-6">
+            <div className="min-w-[260px] flex-1">
+              <div className="flex items-center gap-3">
+                <span
+                  className="h-3 w-3 rounded-full"
+                  style={{ background: ARCHETYPE_COLORS[selectedAgent.archetype] ?? "#0f172a" }}
+                />
+                <div>
+                  <div className="text-[17px] font-semibold text-[var(--text-bright)]">{selectedAgent.name}</div>
+                  <div
+                    className="ui-mono text-[10px] uppercase tracking-[0.16em]"
+                    style={{ color: ARCHETYPE_COLORS[selectedAgent.archetype] ?? "var(--text-muted)" }}
+                  >
+                    {ARCHETYPE_LABELS[selectedAgent.archetype]}
+                  </div>
                 </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <MetricCard label="Belief" value={`${Math.round(selectedAgentState.belief * 100)}%`} color={beliefTone(selectedAgentState.belief)} />
+                <MetricCard label="Delta" value={`${selectedAgentDelta >= 0 ? "+" : ""}${Math.round(selectedAgentDelta * 100)}pt`} color={selectedAgentDelta >= 0 ? "#059669" : "#dc2626"} />
+                <MetricCard label="Confidence" value={`${Math.round(selectedAgentState.confidence * 100)}%`} />
+                <MetricCard label="Mode" value={selectedAgentState.action_taken === "share_claim" ? "Share claim" : "Update belief"} />
+              </div>
+
+              <div className="mt-4 rounded-[20px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="ui-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-subtle)]">
+                  Current reasoning
+                </div>
+                <p className="mt-2 text-[13px] leading-6 text-[var(--text-primary)]">
+                  {selectedAgentState.reasoning || "No reasoning recorded for this tick."}
+                </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-5">
-              <MetricInline label="Belief" value={`${Math.round(selectedAgentState.belief * 100)}%`} color={beliefTone(selectedAgentState.belief)} />
-              <MetricInline label="Delta" value={`${selectedAgentDelta >= 0 ? "+" : ""}${Math.round(selectedAgentDelta * 100)}pt`} color={selectedAgentDelta >= 0 ? "#059669" : "#dc2626"} />
-              <MetricInline label="Confidence" value={`${Math.round(selectedAgentState.confidence * 100)}%`} />
-              <MetricInline
-                label="Mode"
-                value={selectedAgentState.action_taken === "share_claim" ? "share" : "update"}
-              />
+            <div className="grid min-w-[300px] flex-1 gap-4 xl:max-w-[680px] xl:grid-cols-2">
+              <div>
+                <div className="ui-mono mb-3 text-[10px] uppercase tracking-[0.16em] text-[var(--text-subtle)]">
+                  Claims shared this tick
+                </div>
+                <ClaimShareList
+                  shares={selectedAgentSentShares}
+                  direction="sent"
+                />
+              </div>
+
+              <div>
+                <div className="ui-mono mb-3 text-[10px] uppercase tracking-[0.16em] text-[var(--text-subtle)]">
+                  Claims received this tick
+                </div>
+                <ClaimShareList
+                  shares={selectedAgentReceivedShares}
+                  direction="received"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -249,6 +287,63 @@ function MetricInline({ label, value, color }: { label: string; value: string; c
       <span className="ui-mono text-[13px] font-semibold" style={{ color: color ?? "var(--text-primary)" }}>
         {value}
       </span>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="rounded-[18px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-4 py-3">
+      <div className="ui-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-subtle)]">{label}</div>
+      <div className="mt-1 text-[18px] font-semibold" style={{ color: color ?? "var(--text-bright)" }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function ClaimShareList({
+  shares,
+  direction,
+}: {
+  shares: TickSnapshot["claim_shares"];
+  direction: "sent" | "received";
+}) {
+  if (shares.length === 0) {
+    return (
+      <div className="rounded-[20px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] p-4 text-[13px] text-[var(--text-subtle)]">
+        No claims {direction} on this tick.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {shares.map((share, index) => {
+        const counterparty =
+          direction === "sent" ? share.to_agent_name : share.from_agent_name;
+        return (
+          <div
+            key={`${direction}-${share.claim_id}-${share.from_agent_id}-${share.to_agent_id}-${index}`}
+            className="rounded-[20px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] p-4"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="ui-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-subtle)]">
+                {direction === "sent" ? `To ${counterparty}` : `From ${counterparty}`}
+              </div>
+              <div className="ui-mono text-[10px] uppercase tracking-[0.16em] text-[var(--accent)]">
+                Tick {String(share.tick).padStart(2, "0")}
+              </div>
+            </div>
+            <p className="mt-3 text-[13px] font-medium leading-6 text-[var(--text-bright)]">
+              {share.claim_text}
+            </p>
+            <p className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">
+              {share.commentary || "No commentary attached."}
+            </p>
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -65,6 +65,24 @@ function clip(text: string, limit: number): string {
   return normalized.length > limit ? `${normalized.slice(0, limit - 3)}...` : normalized;
 }
 
+function sameNodeLayout(previousNodes: GraphNode[], nextNodes: GraphNode[]): boolean {
+  if (previousNodes.length !== nextNodes.length) return false;
+
+  for (let index = 0; index < previousNodes.length; index += 1) {
+    const previous = previousNodes[index];
+    const next = nextNodes[index];
+    if (!previous || !next) return false;
+    if (previous.id !== next.id) return false;
+    if (previous.targetX !== next.targetX || previous.targetY !== next.targetY) return false;
+    if (previous.radius !== next.radius) return false;
+    if (previous.isSelected !== next.isSelected || previous.isActive !== next.isActive) return false;
+    if (previous.belief !== next.belief || previous.confidence !== next.confidence) return false;
+    if (previous.delta !== next.delta) return false;
+  }
+
+  return true;
+}
+
 function resolveNode(endpoint: string | number | GraphNode): GraphNode | null {
   return typeof endpoint === "object" ? endpoint : null;
 }
@@ -131,6 +149,7 @@ export function AgentConstellation({
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(1240);
   const animationFrameRef = useRef<number | null>(null);
+  const [edgeMode, setEdgeMode] = useState<"both" | "share" | "trust">("both");
 
   // Supabase-sourced trust scores remain a fallback until the API exposes a
   // tick-by-tick trust history derived from the DB.
@@ -277,18 +296,6 @@ export function AgentConstellation({
 
   const activeShares = currentSnapshot?.claim_shares ?? [];
 
-  // Accumulate all historical shares (deduplicated by agent pair, keeping latest)
-  const historicalShares = useMemo(() => {
-    const shareMap = new Map<string, (typeof activeShares)[number]>();
-    for (const snapshot of snapshots) {
-      for (const share of snapshot.claim_shares) {
-        const key = `${share.from_agent_id}:${share.to_agent_id}`;
-        shareMap.set(key, share);
-      }
-    }
-    return [...shareMap.values()];
-  }, [snapshots]);
-
   const layout = useMemo(() => {
     const nodes: GraphNode[] = agents.map((agent) => {
       const state = stateById.get(agent.id);
@@ -318,37 +325,30 @@ export function AgentConstellation({
       };
     });
 
-    const trustMap = new Map<string, GraphLink>();
-    for (const snapshot of snapshots) {
-      for (const update of snapshot.trust_updates) {
-        const sourceAgent = agents.find((agent) => agent.id === update.from_agent_id);
-        trustMap.set(`${update.from_agent_id}:${update.to_agent_id}`, {
-          id: `trust-${update.from_agent_id}-${update.to_agent_id}`,
-          source: update.from_agent_id,
-          target: update.to_agent_id,
-          kind: "trust",
-          strength: Math.max(0.12, Math.min(update.new_trust, 0.95)),
-          label: `${Math.round(update.new_trust * 100)} trust`,
-          isHighlighted:
-            selectedAgentId === update.from_agent_id || selectedAgentId === update.to_agent_id,
-          color: sourceAgent ? ARCHETYPE_COLORS[sourceAgent.archetype] : "#94a3b8",
-        });
-      }
-    }
+    const trustLinks: GraphLink[] = (currentSnapshot?.trust_updates ?? []).map((update) => {
+      const sourceAgent = agents.find((agent) => agent.id === update.from_agent_id);
+      return {
+        id: `trust-${currentTick}-${update.from_agent_id}-${update.to_agent_id}`,
+        source: update.from_agent_id,
+        target: update.to_agent_id,
+        kind: "trust",
+        strength: Math.max(0.12, Math.min(update.new_trust, 0.95)),
+        label: `${Math.round(update.new_trust * 100)} trust`,
+        isHighlighted:
+          selectedAgentId === update.from_agent_id || selectedAgentId === update.to_agent_id,
+        color: sourceAgent ? ARCHETYPE_COLORS[sourceAgent.archetype] : "#94a3b8",
+      };
+    });
 
-    const activeShareKeys = new Set(
-      activeShares.map((s) => `${s.from_agent_id}:${s.to_agent_id}`)
-    );
-    const shareLinks: GraphLink[] = historicalShares.map((share, index) => {
+    const shareLinks: GraphLink[] = activeShares.map((share, index) => {
       const sourceAgent = agents.find((agent) => agent.id === share.from_agent_id);
       const targetAgent = agents.find((agent) => agent.id === share.to_agent_id);
-      const isCurrentlyActive = activeShareKeys.has(`${share.from_agent_id}:${share.to_agent_id}`);
       return {
-        id: `share-${share.from_agent_id}-${share.to_agent_id}-${index}`,
+        id: `share-${share.tick}-${share.from_agent_id}-${share.to_agent_id}-${share.claim_id}-${index}`,
         source: share.from_agent_id,
         target: share.to_agent_id,
         kind: "share" as const,
-        strength: isCurrentlyActive ? 1 : 0.5,
+        strength: 1,
         label: clip(share.claim_text, 42),
         isHighlighted:
           selectedAgentId === share.from_agent_id || selectedAgentId === share.to_agent_id,
@@ -357,7 +357,9 @@ export function AgentConstellation({
       };
     });
 
-    const links: GraphLink[] = [...trustMap.values(), ...shareLinks];
+    const visibleTrustLinks = edgeMode === "share" ? [] : trustLinks;
+    const visibleShareLinks = edgeMode === "trust" ? [] : shareLinks;
+    const links: GraphLink[] = [...visibleTrustLinks, ...visibleShareLinks];
 
     const minLinks = Math.ceil(agents.length * 0.5);
     if (links.length < minLinks) {
@@ -416,7 +418,7 @@ export function AgentConstellation({
     for (let index = 0; index < 320; index += 1) simulation.tick();
 
     return { nodes, links };
-  }, [activeShares, agents, historicalShares, selectedAgentId, snapshots, stateById]);
+  }, [activeShares, agents, currentSnapshot, currentTick, edgeMode, selectedAgentId, snapshots, stateById]);
 
   const [animatedNodes, setAnimatedNodes] = useState<GraphNode[]>(layout.nodes);
 
@@ -425,7 +427,7 @@ export function AgentConstellation({
       if (previousNodes.length === 0) return layout.nodes;
 
       const previousById = new Map(previousNodes.map((node) => [node.id, node]));
-      return layout.nodes.map((node) => {
+      const nextNodes = layout.nodes.map((node) => {
         const previous = previousById.get(node.id);
         return previous
           ? {
@@ -435,6 +437,7 @@ export function AgentConstellation({
             }
           : node;
       });
+      return sameNodeLayout(previousNodes, nextNodes) ? previousNodes : nextNodes;
     });
   }, [layout.nodes]);
 
@@ -452,6 +455,13 @@ export function AgentConstellation({
         toY: node.y ?? node.targetY,
       };
     });
+    const hasMotion = targets.some(
+      (target) => target.fromX !== target.toX || target.fromY !== target.toY
+    );
+    if (!hasMotion) {
+      setAnimatedNodes((previousNodes) => (sameNodeLayout(previousNodes, layout.nodes) ? previousNodes : layout.nodes));
+      return;
+    }
 
     const start = performance.now();
 
@@ -507,17 +517,6 @@ export function AgentConstellation({
   const selectedNode =
     animatedNodes.find((node) => node.id === selectedAgentId) ?? animatedNodes[0] ?? null;
   const renderedHeight = Math.max(680, containerWidth * (SCENE_H / SCENE_W));
-
-  if (!agents.length) {
-    return (
-      <div className="flex min-h-[520px] items-center justify-center rounded-[28px] border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)]">
-        <div className="ui-mono text-[11px] uppercase tracking-[0.18em] text-[var(--text-subtle)]">
-          No agents loaded
-        </div>
-      </div>
-    );
-  }
-
   const gridLines = useMemo(() => {
     const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
     for (let x = 0; x <= SCENE_W; x += GRID_SPACING) {
@@ -529,6 +528,16 @@ export function AgentConstellation({
     return lines;
   }, []);
 
+  if (!agents.length) {
+    return (
+      <div className="flex min-h-[520px] items-center justify-center rounded-[28px] border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)]">
+        <div className="ui-mono text-[11px] uppercase tracking-[0.18em] text-[var(--text-subtle)]">
+          No agents loaded
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-2xl border border-white/10 bg-[#0c0e14] p-2">
       <div
@@ -536,34 +545,6 @@ export function AgentConstellation({
         className="relative overflow-hidden rounded-xl bg-[#0a0c12]"
       >
         <svg width="100%" height={renderedHeight} viewBox={`0 0 ${SCENE_W} ${SCENE_H}`} className="block">
-          <defs>
-            {renderedLinks
-              .filter((link) => link.kind === "share")
-              .map((link) => (
-                <marker
-                  key={`arrow-${link.id}`}
-                  id={`arrow-${link.id}`}
-                  markerWidth="10"
-                  markerHeight="7"
-                  refX="10"
-                  refY="3.5"
-                  orient="auto"
-                >
-                  <polygon points="0 0, 10 3.5, 0 7" fill={link.color} opacity="0.8" />
-                </marker>
-              ))}
-            <marker
-              id="arrow-trust"
-              markerWidth="8"
-              markerHeight="6"
-              refX="8"
-              refY="3"
-              orient="auto"
-            >
-              <polygon points="0 0, 8 3, 0 6" fill="#64748b" opacity="0.5" />
-            </marker>
-          </defs>
-
           {/* Dot grid background */}
           <g opacity="0.12">
             {gridLines.map((line, i) => (
@@ -622,7 +603,7 @@ export function AgentConstellation({
                     }
                     strokeOpacity={
                       isShare
-                        ? link.strength >= 1 ? 1 : 0.7
+                        ? link.strength >= 1 ? 0.92 : 0.66
                         : isAmbient
                           ? link.isHighlighted ? 0.6 : 0.4
                           : link.isHighlighted
@@ -630,11 +611,10 @@ export function AgentConstellation({
                             : 0.7
                     }
                     strokeDasharray={isAmbient ? "6 4" : undefined}
-                    markerEnd={isShare ? `url(#arrow-${link.id})` : link.kind === "trust" ? "url(#arrow-trust)" : undefined}
                     strokeLinecap="round"
                   />
                   {/* Edge label - trust and share edges only (no labels on ambient) */}
-                  {!isAmbient && labelPos && (link.kind === "share" ? link.label : link.label) && (
+                  {!isAmbient && labelPos && link.kind === "trust" && link.label && (
                     <g transform={`translate(${labelPos.x}, ${labelPos.y})`}>
                       {(() => {
                         const text = link.label;
@@ -747,10 +727,9 @@ export function AgentConstellation({
                     fontSize="10"
                     fontFamily="var(--font-mono)"
                     fill="#64748b"
-                    textTransform="uppercase"
                     letterSpacing="0.08em"
                   >
-                    {ARCHETYPE_LABELS[node.archetype]?.split(" ")[0] ?? node.archetype}
+                    {(ARCHETYPE_LABELS[node.archetype]?.split(" ")[0] ?? node.archetype).toUpperCase()}
                   </text>
                 </g>
               );
@@ -759,7 +738,12 @@ export function AgentConstellation({
         </svg>
 
         {/* Legend */}
-        <div className="pointer-events-none absolute left-4 top-4 flex flex-wrap items-center gap-2">
+        <div className="absolute left-4 top-4 flex flex-wrap items-center gap-2">
+          <div className="pointer-events-auto mr-2 flex items-center gap-1 rounded-md border border-white/8 bg-[#0f172a]/90 p-1">
+            <EdgeModeButton label="Both" active={edgeMode === "both"} onClick={() => setEdgeMode("both")} />
+            <EdgeModeButton label="Claims" active={edgeMode === "share"} onClick={() => setEdgeMode("share")} />
+            <EdgeModeButton label="Trust" active={edgeMode === "trust"} onClick={() => setEdgeMode("trust")} />
+          </div>
           <LegendChip label="Trust" color="#64748b" />
           <LegendChip label="Share" color="#f59e0b" />
           <LegendChip label="Ambient" color="#475569" dashed />
@@ -819,5 +803,30 @@ function LegendChip({
       />
       <span className="ui-mono text-[9px] uppercase tracking-wider text-slate-500">{label}</span>
     </div>
+  );
+}
+
+function EdgeModeButton({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded px-2.5 py-1 ui-mono text-[9px] uppercase tracking-wider transition"
+      style={{
+        background: active ? "rgba(245,158,11,0.14)" : "transparent",
+        color: active ? "#f8fafc" : "#94a3b8",
+        border: active ? "1px solid rgba(245,158,11,0.3)" : "1px solid transparent",
+      }}
+    >
+      {label}
+    </button>
   );
 }

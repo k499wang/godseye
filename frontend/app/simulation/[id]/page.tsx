@@ -1,7 +1,7 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { use, useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { getSimulation, startSimulation } from "@/lib/api";
 import { GodseyeLogo } from "@/components/GodseyeLogo";
@@ -9,6 +9,7 @@ import { MOCK_SIMULATION } from "@/lib/mockData";
 import { SimulationReplay } from "@/components/SimulationReplay";
 import { POLLING_INTERVAL_MS } from "@/lib/constants";
 import type { SimulationResponse } from "@/lib/types";
+import { supabase } from "@/lib/supabase";
 
 export default function SimulationPage({
   params,
@@ -27,6 +28,9 @@ export default function SimulationPage({
     ? `/?mode=explore&event=${encodeURIComponent(selectedEventId)}`
     : "/?mode=explore";
   const [isAutoStarting, setIsAutoStarting] = useState(false);
+  const queryClient = useQueryClient();
+  const autoStartRequestedRef = useRef<string | null>(null);
+  const refreshTimeoutRef = useRef<number | null>(null);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["simulation", id],
@@ -42,20 +46,78 @@ export default function SimulationPage({
   });
 
   const simulation = isMock ? MOCK_SIMULATION : data;
+  const simulationStatus = simulation?.status ?? null;
+
+  useEffect(() => {
+    autoStartRequestedRef.current = null;
+    setIsAutoStarting(false);
+  }, [id]);
+
+  useEffect(() => {
+    if (isMock) return;
+
+    const scheduleRefresh = () => {
+      if (refreshTimeoutRef.current !== null) return;
+      refreshTimeoutRef.current = window.setTimeout(() => {
+        refreshTimeoutRef.current = null;
+        void queryClient.invalidateQueries({ queryKey: ["simulation", id] });
+      }, 150);
+    };
+
+    const channel = supabase
+      .channel(`simulation-live:${id}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "simulations",
+        filter: `id=eq.${id}`,
+      }, scheduleRefresh)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "agents",
+        filter: `simulation_id=eq.${id}`,
+      }, scheduleRefresh)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "claim_shares",
+        filter: `simulation_id=eq.${id}`,
+      }, scheduleRefresh)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "reports",
+        filter: `simulation_id=eq.${id}`,
+      }, scheduleRefresh)
+      .subscribe();
+
+    return () => {
+      if (refreshTimeoutRef.current !== null) {
+        window.clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
+      }
+      void supabase.removeChannel(channel);
+    };
+  }, [id, isMock, queryClient]);
 
   useEffect(() => {
     if (isMock || !simulation) return;
-    if (simulation.status !== "pending") return;
-    if (isAutoStarting) return;
+    if (simulationStatus !== "pending") return;
+    if (autoStartRequestedRef.current === simulation.id) return;
 
+    autoStartRequestedRef.current = simulation.id;
     setIsAutoStarting(true);
     startSimulation(simulation.id)
+      .then((nextSimulation) => {
+        queryClient.setQueryData(["simulation", simulation.id], nextSimulation);
+      })
       .catch(() => undefined)
       .finally(() => {
         setIsAutoStarting(false);
         void refetch();
       });
-  }, [isAutoStarting, isMock, refetch, simulation]);
+  }, [isMock, queryClient, refetch, simulation, simulationStatus]);
 
   const showLoadingState =
     !isMock &&
