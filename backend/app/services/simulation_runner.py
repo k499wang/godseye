@@ -331,6 +331,13 @@ class SimulationRunner:
             f'"{market_question}"\n\n'
             f"Your belief is a probability (0.0 to 1.0) that the market resolves YES.\n"
             f"Your confidence (0.0 to 1.0) represents how certain you are.\n\n"
+            f"Write like a real person thinking out loud, not a polished report writer.\n"
+            f"Keep your language short, direct, a little opinionated, and specific to your archetype.\n"
+            f"Use plain words. It is fine to sound skeptical, excited, dismissive, stubborn, cautious, or punchy.\n"
+            f"Avoid corporate phrasing, generic summaries, and formal analyst-speak.\n"
+            f"Reasoning should feel like a quick justification you would say in a fast-moving room.\n"
+            f"Keep reasoning to 1-2 short sentences max.\n"
+            f"Keep commentary even tighter: 1 short sentence max.\n\n"
             f"On each round, choose exactly ONE action:\n"
             f"1. update_belief — Revise your probability and confidence.\n"
             f"2. share_claim — Forward one claim to 1-2 trusted peers.\n\n"
@@ -384,7 +391,7 @@ class SimulationRunner:
         parts.append(
             "Choose one action. If you share a claim, the claim_id MUST be from the "
             "visible or incoming claims above. target_agent_ids must be from the "
-            "trusted agents list. Return ONLY valid JSON."
+            "trusted agents list. Explain yourself briefly and with personality. Return ONLY valid JSON."
         )
 
         return system_prompt, "\n".join(parts)
