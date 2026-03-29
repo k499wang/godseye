@@ -71,6 +71,8 @@ export default function SimulationPage({
 
   if (!simulation) return null;
 
+  const reportReady = simulation.status === "complete";
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--bg-base)]">
       <nav className="flex flex-shrink-0 items-center justify-between border-b border-white/8 bg-[rgba(5,7,13,0.88)] px-5 py-3 backdrop-blur-xl">
@@ -88,15 +90,27 @@ export default function SimulationPage({
             <GodseyeLogo size="sm" />
           </button>
           <div>
-            <div className="eyebrow mb-1 text-[var(--accent)]">Society simulation</div>
+            <div className="eyebrow mb-1 text-[var(--accent)]">Simulation replay</div>
             <span className="ui-mono text-sm text-[var(--text-secondary)]">
               {id.slice(0, 8).toUpperCase()}
             </span>
           </div>
         </div>
-        <div className="ui-mono rounded-full border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.08)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
-          Network first
-        </div>
+
+        {reportReady && (
+          <button
+            onClick={() =>
+              router.push(
+                selectedEventId
+                  ? `/reports/${simulation.id}?event=${encodeURIComponent(selectedEventId)}`
+                  : `/reports/${simulation.id}`
+              )
+            }
+            className="ui-mono rounded-full border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.08)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)] transition hover:bg-[rgba(245,158,11,0.14)]"
+          >
+            View report
+          </button>
+        )}
       </nav>
 
       <div className="flex-1 overflow-hidden">

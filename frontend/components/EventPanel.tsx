@@ -348,24 +348,36 @@ export function EventPanel() {
               <div style={{ height: 1, background: "rgba(255,255,255,0.08)" }} />
 
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {event.simulationId ? (
+                <button
+                  onClick={handlePrimaryAction}
+                  disabled={isActionPending}
+                  style={{
+                    ...primaryButton,
+                    borderColor: `${color}66`,
+                    color,
+                    background: `${color}12`,
+                    opacity: isActionPending ? 0.7 : 1,
+                    cursor: isActionPending ? "wait" : "pointer",
+                  }}
+                >
+                  {isActionPending ? "Launching simulation..." : primaryActionLabel}
+                </button>
+
+                {event.simulationId ? (
                   <>
-                    <button
-                      onClick={() => {
-                        stopAutoSpin();
-                        router.push(
-                          `/simulation/${event.simulationId}?event=${encodeURIComponent(event.id)}`
-                        );
-                      }}
-                      style={{
-                        ...primaryButton,
-                        borderColor: `${color}66`,
-                        color,
-                        background: `${color}12`,
-                      }}
-                    >
-                      Open society
-                    </button>
+                    {event.simulationStatus === "complete" && (
+                      <button
+                        onClick={() => {
+                          stopAutoSpin();
+                          router.push(
+                            `/reports/${event.simulationId}?event=${encodeURIComponent(event.id)}`
+                          );
+                        }}
+                        style={secondaryButton}
+                      >
+                        View report
+                      </button>
+                    )}
                   </>
                 ) : (
                   <p className="ui-mono" style={{ fontSize: 12, letterSpacing: "0.14em", color: "var(--text-muted)", margin: 0, textTransform: "uppercase" }}>
