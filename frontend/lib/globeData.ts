@@ -6,7 +6,8 @@ export type GlobeEventCategory =
   | "election"
   | "tech"
   | "energy"
-  | "macro";
+  | "macro"
+  | "sports";
 
 export interface GlobeEvent {
   id: string;
@@ -32,10 +33,13 @@ export const CATEGORY_COLOR: Record<GlobeEventCategory, string> = {
   tech: "#06B6D4",
   energy: "#10B981",
   macro: "#F97316",
+  sports: "#22D3EE",
 };
 
 function classifyCategory(title: string): GlobeEventCategory {
   const t = title.toLowerCase();
+  if (/\bnfl\b|\bnba\b|\bnhl\b|\bnascar\b|\bmlb\b|\bmls\b|\bufc\b|\bncaa\b|\bncaab\b|\bncaaf\b|fifa|world cup|super bowl|playoffs?|champion|league|tournament|match|vs\.|game 7|series|\bsoccer\b|\btennis\b|\bgolf\b|\bboxing\b|\bf1\b|formula one|grand prix|olympics|premier league|la liga|bundesliga|\bseries\b.*\brace\b/.test(t))
+    return "sports";
   if (/war|ceasefire|military|russia|ukraine|china|taiwan|iran|israel|nato|conflict|troops|invasion|sanction/.test(t))
     return "geopolitical";
   if (/election|vote|president|congress|senate|ballot|prime minister|chancellor|governor/.test(t))

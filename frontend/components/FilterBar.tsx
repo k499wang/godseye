@@ -11,6 +11,7 @@ const CATEGORIES: { key: GlobeEventCategory; label: string }[] = [
   { key: "tech", label: "TECHNOLOGY" },
   { key: "energy", label: "ENERGY" },
   { key: "macro", label: "MACRO" },
+  { key: "sports", label: "SPORTS" },
 ];
 
 export const FilterBar = forwardRef<
