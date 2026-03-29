@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.models.report import Report
@@ -17,7 +18,9 @@ async def get_report(
     db: AsyncSession = Depends(get_db),
 ) -> ReportResponse:
     result = await db.execute(
-        select(Report).where(Report.simulation_id == simulation_id)
+        select(Report)
+        .options(selectinload(Report.simulation))
+        .where(Report.simulation_id == simulation_id)
     )
     report = result.scalar_one_or_none()
     if report is None:
@@ -29,6 +32,7 @@ async def get_report(
     return ReportResponse(
         id=report.id,
         simulation_id=report.simulation_id,
+        market_id=report.simulation.market_id,
         market_probability=float(report.market_probability),
         simulation_probability=float(report.simulation_probability),
         summary=report.summary,

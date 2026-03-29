@@ -91,6 +91,13 @@ class LLMClient:
         )
         timeout_seconds = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
         self._timeout: httpx.Timeout = httpx.Timeout(timeout_seconds)
+        # Reuse a single httpx client for connection pooling (TCP + TLS reuse)
+        self._http_client: httpx.AsyncClient | None = None
+
+    async def _get_http_client(self) -> httpx.AsyncClient:
+        if self._http_client is None or self._http_client.is_closed:
+            self._http_client = httpx.AsyncClient(timeout=self._timeout)
+        return self._http_client
 
     # ------------------------------------------------------------------
     # Public interface
@@ -162,13 +169,13 @@ class LLMClient:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.post(
-                    self._lava_apollo_url,
-                    json=payload,
-                    headers=self._lava_headers(),
-                )
-                response.raise_for_status()
+            client = await self._get_http_client()
+            response = await client.post(
+                self._lava_apollo_url,
+                json=payload,
+                headers=self._lava_headers(),
+            )
+            response.raise_for_status()
         except httpx.HTTPError:
             return []
 
@@ -198,13 +205,13 @@ class LLMClient:
             "messages": messages,
         }
 
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            response = await client.post(
-                self._lava_chat_completions_url,
-                json=payload,
-                headers=self._lava_headers(),
-            )
-            response.raise_for_status()
+        client = await self._get_http_client()
+        response = await client.post(
+            self._lava_chat_completions_url,
+            json=payload,
+            headers=self._lava_headers(),
+        )
+        response.raise_for_status()
 
         data = response.json()
         return self._extract_message_content(data)

@@ -111,6 +111,33 @@ class ReportAgent:
 
         return report
 
+    def build_fallback_report(
+        self,
+        simulation_id: str,
+        result: SimulationResult,
+        market_question: str = "",
+        market_probability: float = 0.5,
+    ) -> ReportData:
+        """Produce a fully-populated fallback report without relying on live LLM calls."""
+        sim_probability = self._compute_sim_probability(result)
+        sim_summary = self._build_sim_summary(
+            result,
+            market_question,
+            market_probability,
+            sim_probability,
+        )
+        draft = self._fallback_draft(sim_summary)
+        return ReportData(
+            simulation_id=simulation_id,
+            market_probability=market_probability,
+            simulation_probability=sim_probability,
+            summary=str(draft.get("summary", "")),
+            key_drivers=list(draft.get("key_drivers", [])),
+            faction_analysis=str(draft.get("faction_analysis", "")),
+            trust_insights=str(draft.get("trust_insights", "")),
+            recommendation=str(draft.get("recommendation", "")),
+        )
+
     # ------------------------------------------------------------------
     # Probability computation
     # ------------------------------------------------------------------

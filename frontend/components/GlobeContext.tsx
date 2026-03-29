@@ -12,6 +12,7 @@ import {
 } from "react";
 import { GLOBE_EVENTS, browseItemToGlobeEvent, type GlobeEvent, type GlobeEventCategory } from "@/lib/globeData";
 import { browseMarkets, refreshMarkets } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 
 const ALL_CATEGORIES: GlobeEventCategory[] = [
   "monetary",
@@ -57,28 +58,75 @@ const AUTO_SPIN_RESUME_MS = 6000;
 export function GlobeProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<GlobeEvent[]>(GLOBE_EVENTS);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const realtimeRefreshTimerRef = useRef<number | null>(null);
+
+  const applyBrowseSnapshot = useCallback((markets: Parameters<typeof browseItemToGlobeEvent>[0][]) => {
+    setEvents(markets.map(browseItemToGlobeEvent));
+  }, []);
+
+  const loadBrowseSnapshot = useCallback(async () => {
+    const res = await browseMarkets();
+    applyBrowseSnapshot(res.markets);
+  }, [applyBrowseSnapshot]);
 
   useEffect(() => {
     let cancelled = false;
     browseMarkets()
       .then((res) => {
-        if (!cancelled) setEvents(res.markets.map(browseItemToGlobeEvent));
+        if (!cancelled) applyBrowseSnapshot(res.markets);
       })
       .catch(() => {/* keep GLOBE_EVENTS fallback on failure */});
     return () => { cancelled = true; };
-  }, []);
+  }, [applyBrowseSnapshot]);
 
   const refreshEvents = useCallback(async () => {
     setIsLoadingEvents(true);
     try {
       const res = await refreshMarkets();
-      setEvents(res.markets.map(browseItemToGlobeEvent));
+      applyBrowseSnapshot(res.markets);
     } catch {
       // keep current events on failure
     } finally {
       setIsLoadingEvents(false);
     }
-  }, []);
+  }, [applyBrowseSnapshot]);
+
+  useEffect(() => {
+    const scheduleRefresh = () => {
+      if (realtimeRefreshTimerRef.current !== null) return;
+      realtimeRefreshTimerRef.current = window.setTimeout(() => {
+        realtimeRefreshTimerRef.current = null;
+        void loadBrowseSnapshot().catch(() => undefined);
+      }, 250);
+    };
+
+    const channel = supabase
+      .channel("globe-events-live")
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "markets",
+      }, scheduleRefresh)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "analysis_sessions",
+      }, scheduleRefresh)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "simulations",
+      }, scheduleRefresh)
+      .subscribe();
+
+    return () => {
+      if (realtimeRefreshTimerRef.current !== null) {
+        window.clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = null;
+      }
+      void supabase.removeChannel(channel);
+    };
+  }, [loadBrowseSnapshot]);
   const [activeFilters, setActiveFilters] = useState<Set<GlobeEventCategory>>(
     new Set(ALL_CATEGORIES)
   );

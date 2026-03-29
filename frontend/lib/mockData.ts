@@ -4,6 +4,7 @@ import type {
   TickSnapshot,
   SimulationResponse,
   MarketResponse,
+  PaperTradingResponse,
   ReportResponse,
 } from "./types";
 
@@ -301,6 +302,7 @@ export const MOCK_SIMULATION: SimulationResponse = {
 export const MOCK_REPORT: ReportResponse = {
   id: "report-001",
   simulation_id: "sim-001",
+  market_id: "mkt-001",
   market_probability: 0.62,
   simulation_probability: 0.57,
   summary:
@@ -317,4 +319,34 @@ export const MOCK_REPORT: ReportResponse = {
     "Nair→Chen trust relationship strengthened most (+0.04 by tick 30), driven by high-quality CPI data sharing. Webb→Kim became the anchor for the NO faction. Cross-faction trust remained low throughout — neither faction significantly updated on the other's claims.",
   recommendation:
     "The simulation's 57% estimate suggests the market may be slightly overpricing a rate cut at 62%. The gap is within normal uncertainty bounds but the strong labor market is an underweighted risk factor. Consider a small position against the market consensus or hold if risk tolerance is low.",
+};
+
+export const MOCK_PAPER_TRADING: PaperTradingResponse = {
+  position: {
+    id: "paper-pos-001",
+    market_id: "mkt-001",
+    simulation_id: "sim-001",
+    report_id: "report-001",
+    side: "no",
+    avg_entry_price: 0.38,
+    shares: 65.78947,
+    total_cost: 25,
+    current_price: 0.43,
+    market_probability: 0.57,
+    current_value: 28.28947,
+    unrealized_pnl: 3.28947,
+    unrealized_pnl_pct: 0.1316,
+    created_at: new Date(Date.now() - 1800000).toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  trades: [
+    {
+      id: "paper-trade-001",
+      side: "no",
+      price: 0.38,
+      shares: 65.78947,
+      amount: 25,
+      created_at: new Date(Date.now() - 1800000).toISOString(),
+    },
+  ],
 };

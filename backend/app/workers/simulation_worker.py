@@ -41,6 +41,7 @@ async def run_simulation(
     market_question: str = "",
     market_probability: float = 0.5,
     claims: list[dict[str, Any]] | None = None,
+    total_ticks: int = 30,
 ) -> SimulationResult:
     """
     Full pipeline: build world -> run simulation -> persist results.
@@ -97,6 +98,7 @@ async def run_simulation(
             agents=agents,
             claims=claim_objects,
             market_question=market_question,
+            total_ticks=total_ticks,
             on_tick_complete=(
                 (lambda snapshot, current_agents: _persist_tick(
                     db,
@@ -307,6 +309,7 @@ async def _persist_tick(
     try:
         from sqlalchemy import select
         from app.models.agent import Agent
+        from app.models.claim import Claim as ClaimModel
         from app.models.claim_share import ClaimShare
         from app.models.simulation import Simulation
 
@@ -335,6 +338,13 @@ async def _persist_tick(
                 )
             )
         ).scalars().all()
+        share_claim_ids = {UUID(cs.claim_id) for cs in snapshot.claim_shares}
+        existing_claims = (
+            await db.execute(
+                select(ClaimModel).where(ClaimModel.id.in_(share_claim_ids))
+            )
+        ).scalars().all() if share_claim_ids else []
+        existing_claim_ids = {claim.id for claim in existing_claims}
         existing_share_keys = {
             (
                 str(share.from_agent_id),
@@ -349,15 +359,39 @@ async def _persist_tick(
             share_key = (cs.from_agent_id, cs.to_agent_id, cs.claim_id, cs.tick)
             if share_key in existing_share_keys:
                 continue
-            db.add(ClaimShare(
-                simulation_id=UUID(simulation_id),
-                from_agent_id=UUID(cs.from_agent_id),
-                to_agent_id=UUID(cs.to_agent_id),
-                claim_id=UUID(cs.claim_id),
-                commentary=cs.commentary,
-                tick_number=cs.tick,
-                delivered=True,
-            ))
+            try:
+                claim_uuid = UUID(cs.claim_id)
+                if claim_uuid not in existing_claim_ids:
+                    db.add(ClaimModel(
+                        id=claim_uuid,
+                        session_id=sim.session_id,
+                        market_id=sim.market_id,
+                        text=cs.claim_text,
+                        stance=cs.claim_stance,
+                        strength_score=cs.claim_strength_score,
+                        novelty_score=cs.claim_novelty_score,
+                    ))
+                    existing_claim_ids.add(claim_uuid)
+                db.add(ClaimShare(
+                    simulation_id=UUID(simulation_id),
+                    from_agent_id=UUID(cs.from_agent_id),
+                    to_agent_id=UUID(cs.to_agent_id),
+                    claim_id=claim_uuid,
+                    commentary=cs.commentary,
+                    tick_number=cs.tick,
+                    delivered=True,
+                ))
+            except (ValueError, Exception) as share_err:
+                logger.warning(
+                    "Skipping invalid claim_share on tick %s: from=%s to=%s claim=%s error=%s",
+                    cs.tick, cs.from_agent_id, cs.to_agent_id, cs.claim_id, share_err,
+                )
+                await db.rollback()
+                # Re-fetch sim to reattach after rollback
+                sim = await db.get(Simulation, UUID(simulation_id))
+                if sim is None:
+                    return
+                continue
 
         await db.commit()
     except Exception as e:
@@ -438,7 +472,7 @@ async def _generate_report(
 ) -> Any:
     """Generate and persist the report. Returns ReportData or None on failure."""
     try:
-        from app.services.report_agent import report_agent, ReportData
+        from app.services.report_agent import report_agent
 
         report_data = await report_agent.generate(
             simulation_id=simulation_id,
@@ -453,7 +487,21 @@ async def _generate_report(
         return report_data
     except Exception as e:
         logger.warning("Report generation failed: %s", e)
-        return None
+        try:
+            from app.services.report_agent import report_agent
+
+            fallback_report = report_agent.build_fallback_report(
+                simulation_id=simulation_id,
+                result=result,
+                market_question=market_question,
+                market_probability=market_probability,
+            )
+            await _persist_report(db, fallback_report)
+            logger.info("Persisted fallback report for simulation %s", simulation_id)
+            return fallback_report
+        except Exception as fallback_err:
+            logger.warning("Fallback report generation failed: %s", fallback_err)
+            return None
 
 
 async def _persist_report(db, report_data) -> None:
@@ -462,18 +510,36 @@ async def _persist_report(db, report_data) -> None:
         return
     try:
         from app.models.report import Report
+        existing_report = await db.get(Report, UUID(report_data.id))
+        if existing_report is None:
+            from sqlalchemy import select
 
-        db.add(Report(
-            id=UUID(report_data.id),
-            simulation_id=UUID(report_data.simulation_id),
-            market_probability=report_data.market_probability,
-            simulation_probability=report_data.simulation_probability,
-            summary=report_data.summary,
-            key_drivers=report_data.key_drivers,
-            faction_analysis=report_data.faction_analysis,
-            trust_insights=report_data.trust_insights,
-            recommendation=report_data.recommendation,
-        ))
+            existing_report = (
+                await db.execute(
+                    select(Report).where(Report.simulation_id == UUID(report_data.simulation_id))
+                )
+            ).scalar_one_or_none()
+
+        if existing_report is None:
+            db.add(Report(
+                id=UUID(report_data.id),
+                simulation_id=UUID(report_data.simulation_id),
+                market_probability=report_data.market_probability,
+                simulation_probability=report_data.simulation_probability,
+                summary=report_data.summary,
+                key_drivers=report_data.key_drivers,
+                faction_analysis=report_data.faction_analysis,
+                trust_insights=report_data.trust_insights,
+                recommendation=report_data.recommendation,
+            ))
+        else:
+            existing_report.market_probability = report_data.market_probability
+            existing_report.simulation_probability = report_data.simulation_probability
+            existing_report.summary = report_data.summary
+            existing_report.key_drivers = report_data.key_drivers
+            existing_report.faction_analysis = report_data.faction_analysis
+            existing_report.trust_insights = report_data.trust_insights
+            existing_report.recommendation = report_data.recommendation
         await db.commit()
     except Exception as e:
         logger.warning("Failed to persist report: %s", e)

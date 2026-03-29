@@ -35,6 +35,8 @@ TOTAL_TICKS: int = 30
 VISIBLE_CLAIMS_PER_STANCE: int = 4
 CLAIM_RANKING_WEIGHT_STRENGTH: float = 0.7
 CLAIM_RANKING_WEIGHT_NOVELTY: float = 0.3
+OWN_CLAIM_MIN_SHARE_SCORE: float = 0.45
+OWN_CLAIM_OVERRIDE_MARGIN: float = 0.05
 TRUST_SHARE_DELTA: float = 0.02
 TRUST_IGNORE_DELTA: float = -0.01
 FACTION_THRESHOLD: float = 0.08
@@ -68,6 +70,9 @@ class _PendingShare:
     to_agent_name: str = ""
     claim_id: str = ""
     claim_text: str = ""
+    claim_stance: Literal["yes", "no"] = "yes"
+    claim_strength_score: float = 0.5
+    claim_novelty_score: float = 0.5
     commentary: str = ""
     tick: int = 0
     delivered: bool = False
@@ -175,12 +180,13 @@ class SimulationRunner:
             claims = _generate_stub_claims()
 
         claims_by_id: dict[str, Claim] = {c.id: c for c in claims}
+        claim_origins: dict[str, str | None] = {c.id: None for c in claims}
         all_claim_shares: list[_PendingShare] = []
-        visible_claims = self._select_visible_claims(claims)
         tick_data: list[TickSnapshot] = []
 
         for tick_num in range(1, total_ticks + 1):
             logger.info("Simulation %s — tick %d/%d", simulation_id, tick_num, total_ticks)
+            visible_claims = self._select_visible_claims(list(claims_by_id.values()))
 
             # 1. Incoming claims per agent (shares from previous tick)
             incoming_by_agent: dict[str, list[_PendingShare]] = {
@@ -190,8 +196,15 @@ class SimulationRunner:
 
             # 2. Prompt + LLM call for all 12 agents in parallel
             async def _process(agent: AgentRecord) -> tuple[AgentRecord, dict[str, Any]]:
+                self_originated_claims = self._get_agent_originated_claims(
+                    agent=agent,
+                    visible_claims=visible_claims,
+                    claims_by_id=claims_by_id,
+                    claim_origins=claim_origins,
+                )
                 sys_prompt, usr_prompt = self._build_agent_prompt(
                     agent, agents, visible_claims,
+                    self_originated_claims,
                     incoming_by_agent.get(agent.id, []),
                     market_question, tick_num,
                 )
@@ -223,8 +236,22 @@ class SimulationRunner:
                     action, agent, visible_claims,
                     incoming_by_agent.get(agent.id, []), agents,
                 ):
+                    shared_claim = self._resolve_share_claim(
+                        action=action,
+                        agent=agent,
+                        visible_claims=visible_claims,
+                        incoming_claims=incoming_by_agent.get(agent.id, []),
+                        claims_by_id=claims_by_id,
+                        claim_origins=claim_origins,
+                    )
+                    if shared_claim is None:
+                        state = self._apply_belief_update(agent, action)
+                        tick_agent_states.append(state)
+                        continue
+                    claims_by_id[shared_claim.id] = shared_claim
+                    claim_origins.setdefault(shared_claim.id, agent.id)
                     new_shares = self._create_claim_shares(
-                        agent, action, agents, claims_by_id,
+                        agent, action, agents, shared_claim,
                         tick_num, simulation_id,
                     )
                     tick_shares.extend(new_shares)
@@ -318,6 +345,7 @@ class SimulationRunner:
         agent: AgentRecord,
         all_agents: list[AgentRecord],
         visible_claims: list[Claim],
+        self_originated_claims: list[Claim],
         incoming_claims: list[_PendingShare],
         market_question: str,
         current_tick: int,
@@ -340,12 +368,23 @@ class SimulationRunner:
             f"Keep commentary even tighter: 1 short sentence max.\n\n"
             f"On each round, choose exactly ONE action:\n"
             f"1. update_belief — Revise your probability and confidence.\n"
-            f"2. share_claim — Forward one claim to 1-2 trusted peers.\n\n"
+            f"2. share_claim — Either forward one existing claim OR create a new claim and send it to 1-4 trusted peers.\n\n"
+            f"IMPORTANT: Good forecasters actively share evidence. You should share claims "
+            f"roughly 40-60% of the time — especially when you see a strong or novel claim "
+            f"that your peers might not have seen. Hoarding information is bad forecasting. "
+            f"When you decide to share, default to originating your own claim or reusing one "
+            f"you personally created earlier. Only forward someone else's claim when it is "
+            f"clearly more important than anything you would say yourself.\n"
+            f"When sharing, send to MULTIPLE peers (2-4 agents) — the more people who see "
+            f"important evidence, the better the group forecast becomes. Don't just send to one person.\n\n"
             f"Return ONLY valid JSON matching one of these shapes:\n"
             f'{{"action":"update_belief","new_probability":<float 0-1>,'
             f'"confidence":<float 0-1>,"reasoning":"<text>"}}\n'
             f'{{"action":"share_claim","claim_id":"<id>",'
-            f'"target_agent_ids":["<id>"],"commentary":"<text>","reasoning":"<text>"}}'
+            f'"target_agent_ids":["<id>","<id>",...],"commentary":"<text>","reasoning":"<text>"}}'
+            f'\n{{"action":"share_claim","claim_text":"<new claim>",'
+            f'"claim_stance":"yes|no","target_agent_ids":["<id>","<id>",...],'
+            f'"commentary":"<text>","reasoning":"<text>"}}'
         )
 
         parts: list[str] = [
@@ -374,6 +413,12 @@ class SimulationRunner:
             parts.append(f"  {i}. [id: {claim.id}] {claim.text} (stance: {claim.stance})")
         parts.append("")
 
+        if self_originated_claims:
+            parts.append("Claims you originated:")
+            for claim in self_originated_claims:
+                parts.append(f"  - [id: {claim.id}] {claim.text} (stance: {claim.stance})")
+            parts.append("")
+
         # Incoming claims
         if incoming_claims:
             parts.append("Claims shared with you this round:")
@@ -389,9 +434,15 @@ class SimulationRunner:
             parts.append("")
 
         parts.append(
-            "Choose one action. If you share a claim, the claim_id MUST be from the "
-            "visible or incoming claims above. target_agent_ids must be from the "
-            "trusted agents list. Explain yourself briefly and with personality. Return ONLY valid JSON."
+            "Choose one action. If you share a claim, either use a claim_id from the "
+            "visible or incoming claims above OR create a fresh claim_text of your own. "
+            "If you create a new claim, set claim_stance to yes or no. "
+            "Very strong preference: create your own claim when sharing, or reuse one you already originated. "
+            "Only forward someone else's claim if it is substantially stronger than your own available view. "
+            "target_agent_ids must be from the trusted agents list — include 2-4 agents to spread evidence widely. "
+            "Explain yourself briefly and with personality. "
+            "Remember: sharing strong evidence with multiple peers is just as valuable as updating your own belief. "
+            "Return ONLY valid JSON."
         )
 
         return system_prompt, "\n".join(parts)
@@ -437,8 +488,15 @@ class SimulationRunner:
                 parsed.setdefault("reasoning", "")
 
             elif action_type == "share_claim":
-                if not parsed.get("claim_id") or not parsed.get("target_agent_ids"):
+                claim_id = str(parsed.get("claim_id", "")).strip()
+                claim_text = " ".join(str(parsed.get("claim_text", "")).split()).strip()
+                if (not claim_id and not claim_text) or not parsed.get("target_agent_ids"):
                     return default_action
+                parsed["claim_id"] = claim_id
+                parsed["claim_text"] = claim_text
+                claim_stance = str(parsed.get("claim_stance", "")).strip().lower()
+                if claim_stance in ("yes", "no"):
+                    parsed["claim_stance"] = claim_stance
                 parsed.setdefault("commentary", "")
                 parsed.setdefault("reasoning", "")
 
@@ -458,15 +516,39 @@ class SimulationRunner:
         incoming_claims: list[_PendingShare],
         all_agents: list[AgentRecord],
     ) -> bool:
-        claim_id = str(action.get("claim_id", ""))
+        claim_id = str(action.get("claim_id", "")).strip()
+        claim_text = " ".join(str(action.get("claim_text", "")).split()).strip()
         target_ids = action.get("target_agent_ids", [])
 
-        valid_claim_ids = {c.id for c in visible_claims} | {ic.claim_id for ic in incoming_claims}
-        if claim_id not in valid_claim_ids:
+        valid_claim_ids = {str(c.id).strip() for c in visible_claims} | {str(ic.claim_id).strip() for ic in incoming_claims}
+        if claim_id:
+            if claim_id not in valid_claim_ids:
+                logger.warning(
+                    "Agent %s share_claim rejected: claim_id %s not in %d valid claims",
+                    agent.name, claim_id, len(valid_claim_ids),
+                )
+                return False
+        elif not claim_text:
+            logger.warning(
+                "Agent %s share_claim rejected: missing claim_id and claim_text",
+                agent.name,
+            )
             return False
 
-        valid_agent_ids = {a.id for a in all_agents if a.id != agent.id}
-        if not target_ids or any(str(tid) not in valid_agent_ids for tid in target_ids):
+        claim_stance = str(action.get("claim_stance", "")).strip().lower()
+        if claim_text and claim_stance and claim_stance not in ("yes", "no"):
+            logger.warning(
+                "Agent %s share_claim rejected: invalid claim_stance %s",
+                agent.name, claim_stance,
+            )
+            return False
+
+        valid_agent_ids = {str(a.id).strip() for a in all_agents if a.id != agent.id}
+        if not target_ids or any(str(tid).strip() not in valid_agent_ids for tid in target_ids):
+            logger.warning(
+                "Agent %s share_claim rejected: invalid target_agent_ids %s",
+                agent.name, target_ids,
+            )
             return False
 
         return True
@@ -474,6 +556,135 @@ class SimulationRunner:
     # ------------------------------------------------------------------
     # Apply actions
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _score_claim_for_sharing(claim: Claim, agent: AgentRecord) -> float:
+        score = (
+            CLAIM_RANKING_WEIGHT_STRENGTH * claim.strength_score
+            + CLAIM_RANKING_WEIGHT_NOVELTY * claim.novelty_score
+        )
+        belief_alignment = agent.current_belief if claim.stance == "yes" else (1.0 - agent.current_belief)
+        return round(min(1.0, score + belief_alignment * 0.1), 4)
+
+    def _get_agent_originated_claims(
+        self,
+        *,
+        agent: AgentRecord,
+        visible_claims: list[Claim],
+        claims_by_id: dict[str, Claim],
+        claim_origins: dict[str, str | None],
+    ) -> list[Claim]:
+        visible_ids = {claim.id for claim in visible_claims}
+        own_claims = [
+            claim
+            for claim_id, claim in claims_by_id.items()
+            if claim_origins.get(claim_id) == agent.id and claim_id in visible_ids
+        ]
+        return sorted(
+            own_claims,
+            key=lambda claim: self._score_claim_for_sharing(claim, agent),
+            reverse=True,
+        )
+
+    def _select_preferred_claim(
+        self,
+        *,
+        agent: AgentRecord,
+        selected_claim: Claim | None,
+        visible_claims: list[Claim],
+        claims_by_id: dict[str, Claim],
+        claim_origins: dict[str, str | None],
+    ) -> Claim | None:
+        own_candidates = self._get_agent_originated_claims(
+            agent=agent,
+            visible_claims=visible_claims,
+            claims_by_id=claims_by_id,
+            claim_origins=claim_origins,
+        )
+        best_own_claim = own_candidates[0] if own_candidates else None
+        if best_own_claim is None:
+            return selected_claim
+
+        own_score = self._score_claim_for_sharing(best_own_claim, agent)
+        if own_score < OWN_CLAIM_MIN_SHARE_SCORE:
+            return selected_claim
+
+        if selected_claim is None:
+            return best_own_claim
+
+        if claim_origins.get(selected_claim.id) == agent.id:
+            return selected_claim
+
+        selected_score = self._score_claim_for_sharing(selected_claim, agent)
+        if selected_score > own_score + OWN_CLAIM_OVERRIDE_MARGIN:
+            return selected_claim
+
+        return best_own_claim
+
+    @staticmethod
+    def _estimate_generated_claim_strength(agent: AgentRecord) -> float:
+        extremity = min(1.0, abs(agent.current_belief - 0.5) * 2)
+        return round(max(0.35, min(0.95, 0.35 + agent.confidence * 0.4 + extremity * 0.2)), 3)
+
+    @staticmethod
+    def _estimate_generated_claim_novelty(claim_text: str, claims_by_id: dict[str, Claim]) -> float:
+        normalized = set(claim_text.lower().split())
+        if not normalized:
+            return 0.5
+        best_overlap = 0.0
+        for claim in claims_by_id.values():
+            other_tokens = set(claim.text.lower().split())
+            if not other_tokens:
+                continue
+            overlap = len(normalized & other_tokens) / len(normalized | other_tokens)
+            best_overlap = max(best_overlap, overlap)
+        return round(max(0.25, min(0.95, 0.82 - best_overlap * 0.45)), 3)
+
+    def _resolve_share_claim(
+        self,
+        action: dict[str, Any],
+        agent: AgentRecord,
+        visible_claims: list[Claim],
+        incoming_claims: list[_PendingShare],
+        claims_by_id: dict[str, Claim],
+        claim_origins: dict[str, str | None],
+    ) -> Claim | None:
+        claim_id = str(action.get("claim_id", "")).strip()
+        selected_claim: Claim | None = None
+        if claim_id:
+            selected_claim = claims_by_id.get(claim_id)
+            return self._select_preferred_claim(
+                agent=agent,
+                selected_claim=selected_claim,
+                visible_claims=visible_claims,
+                claims_by_id=claims_by_id,
+                claim_origins=claim_origins,
+            )
+
+        claim_text = " ".join(str(action.get("claim_text", "")).split()).strip()
+        if not claim_text:
+            return self._select_preferred_claim(
+                agent=agent,
+                selected_claim=None,
+                visible_claims=visible_claims,
+                claims_by_id=claims_by_id,
+                claim_origins=claim_origins,
+            )
+
+        claim_stance = str(action.get("claim_stance", "")).strip().lower()
+        if claim_stance not in ("yes", "no"):
+            claim_stance = "yes" if agent.current_belief >= 0.5 else "no"
+
+        for existing in claims_by_id.values():
+            if existing.stance == claim_stance and existing.text.strip().lower() == claim_text.lower():
+                return existing
+
+        return Claim(
+            text=claim_text,
+            stance=claim_stance,
+            strength_score=self._estimate_generated_claim_strength(agent),
+            novelty_score=self._estimate_generated_claim_novelty(claim_text, claims_by_id),
+        )
 
     @staticmethod
     def _apply_belief_update(
@@ -498,13 +709,10 @@ class SimulationRunner:
         agent: AgentRecord,
         action: dict[str, Any],
         all_agents: list[AgentRecord],
-        claims_by_id: dict[str, Claim],
+        claim: Claim,
         current_tick: int,
         simulation_id: str,
     ) -> list[_PendingShare]:
-        claim_id = str(action["claim_id"])
-        claim = claims_by_id.get(claim_id)
-        claim_text = claim.text if claim else ""
         commentary = action.get("commentary", "")
         agent_lookup = {a.id: a for a in all_agents}
 
@@ -515,8 +723,11 @@ class SimulationRunner:
                 from_agent_name=agent.name,
                 to_agent_id=str(tid),
                 to_agent_name=agent_lookup[str(tid)].name if str(tid) in agent_lookup else "Unknown",
-                claim_id=claim_id,
-                claim_text=claim_text,
+                claim_id=claim.id,
+                claim_text=claim.text,
+                claim_stance=claim.stance,
+                claim_strength_score=claim.strength_score,
+                claim_novelty_score=claim.novelty_score,
                 commentary=commentary,
                 tick=current_tick,
                 delivered=False,

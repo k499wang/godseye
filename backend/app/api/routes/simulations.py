@@ -2,7 +2,7 @@ import asyncio
 from decimal import Decimal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -12,11 +12,13 @@ from sqlalchemy.orm import selectinload
 from app.core.database import SessionLocal, get_db
 from app.models.agent import Agent
 from app.models.claim import Claim
+from app.models.claim_share import ClaimShare
 from app.models.market import Market
 from app.models.session import AnalysisSession
 from app.models.simulation import Simulation
 from app.schemas.simulation import (
     AgentSummary,
+    ClaimShareRecord,
     ProfessionalBackground,
     SimulationResponse,
     TickSnapshot,
@@ -34,6 +36,7 @@ class BuildWorldRequest(BaseModel):
 @router.post("/build-world", response_model=SimulationResponse)
 async def build_world(
     payload: BuildWorldRequest,
+    demo: bool = Query(False, description="Demo mode: skip LLM profile generation"),
     db: AsyncSession = Depends(get_db),
 ) -> SimulationResponse:
     session = await _load_session(db=db, session_id=payload.session_id)
@@ -71,6 +74,7 @@ async def build_world(
             simulation_id=simulation.id,
             session_id=session.id,
             market_question=session.market.question,
+            demo=demo,
         )
     )
 
@@ -86,6 +90,7 @@ async def build_world(
 @router.post("/{id}/start", response_model=SimulationResponse)
 async def start_simulation(
     id: UUID,
+    demo: bool = Query(False, description="Demo mode: run 10 ticks instead of 30"),
     db: AsyncSession = Depends(get_db),
 ) -> SimulationResponse:
     simulation = await _load_simulation(db=db, simulation_id=id)
@@ -101,7 +106,9 @@ async def start_simulation(
     if simulation.status in {"running", "complete"}:
         return _to_simulation_response(simulation)
 
+    total_ticks = 10 if demo else 30
     simulation.status = "running"
+    simulation.total_ticks = total_ticks
     await db.commit()
 
     claim_rows = await _load_claim_rows(db=db, session_id=simulation.session_id)
@@ -121,6 +128,7 @@ async def start_simulation(
                 }
                 for claim in claim_rows
             ],
+            total_ticks=total_ticks,
         )
     )
 
@@ -169,6 +177,9 @@ async def _find_latest_simulation(
         select(Simulation)
         .options(
             selectinload(Simulation.agents),
+            selectinload(Simulation.claim_shares).selectinload(ClaimShare.from_agent),
+            selectinload(Simulation.claim_shares).selectinload(ClaimShare.to_agent),
+            selectinload(Simulation.claim_shares).selectinload(ClaimShare.claim),
             selectinload(Simulation.market),
         )
         .where(Simulation.session_id == session_id)
@@ -186,6 +197,9 @@ async def _load_simulation(
         select(Simulation)
         .options(
             selectinload(Simulation.agents),
+            selectinload(Simulation.claim_shares).selectinload(ClaimShare.from_agent),
+            selectinload(Simulation.claim_shares).selectinload(ClaimShare.to_agent),
+            selectinload(Simulation.claim_shares).selectinload(ClaimShare.claim),
             selectinload(Simulation.market),
         )
         .where(Simulation.id == simulation_id)
@@ -207,6 +221,43 @@ async def _load_claim_rows(
 
 
 def _to_simulation_response(simulation: Simulation) -> SimulationResponse:
+    tick_data = [
+        TickSnapshot.model_validate(snapshot)
+        for snapshot in (simulation.tick_data or [])
+    ]
+    tick_by_number = {snapshot.tick: snapshot for snapshot in tick_data}
+
+    for share in sorted(
+        simulation.claim_shares,
+        key=lambda row: (row.tick_number, row.created_at, row.id),
+    ):
+        tick_snapshot = tick_by_number.get(share.tick_number)
+        if tick_snapshot is None:
+            continue
+
+        share_exists = any(
+            existing.from_agent_id == share.from_agent_id
+            and existing.to_agent_id == share.to_agent_id
+            and existing.claim_id == share.claim_id
+            and existing.tick == share.tick_number
+            for existing in tick_snapshot.claim_shares
+        )
+        if share_exists:
+            continue
+
+        tick_snapshot.claim_shares.append(
+            ClaimShareRecord(
+                from_agent_id=share.from_agent_id,
+                from_agent_name=share.from_agent.name,
+                to_agent_id=share.to_agent_id,
+                to_agent_name=share.to_agent.name,
+                claim_id=share.claim_id,
+                claim_text=share.claim.text,
+                commentary=share.commentary,
+                tick=share.tick_number,
+            )
+        )
+
     return SimulationResponse(
         id=simulation.id,
         session_id=simulation.session_id,
@@ -228,10 +279,7 @@ def _to_simulation_response(simulation: Simulation) -> SimulationResponse:
             )
             for agent in simulation.agents
         ],
-        tick_data=[
-            TickSnapshot.model_validate(snapshot)
-            for snapshot in (simulation.tick_data or [])
-        ],
+        tick_data=tick_data,
         created_at=simulation.created_at,
         completed_at=simulation.completed_at,
     )
@@ -242,6 +290,7 @@ async def _build_world_background(
     simulation_id: UUID,
     session_id: UUID,
     market_question: str,
+    demo: bool = False,
 ) -> None:
     async with SessionLocal() as db:
         try:
@@ -258,6 +307,7 @@ async def _build_world_background(
                 session_id=str(session_id),
                 simulation_id=str(simulation_id),
                 market_question=market_question,
+                skip_llm_profiles=demo,
             )
 
             db.add_all(

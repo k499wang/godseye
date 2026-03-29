@@ -1,14 +1,20 @@
 "use client";
 
 import { useWallet } from "@solana/wallet-adapter-react";
-import type { WalletName } from "@solana/wallet-adapter-base";
+import { WalletReadyState } from "@solana/wallet-adapter-base";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export function WalletButton() {
-  const { publicKey, wallet, select, connect, disconnect, connecting, connected } =
+  const { publicKey, wallet, wallets, select, connect, disconnect, connecting, connected } =
     useWallet();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const phantomWallet = wallets.find((entry) => entry.adapter.name === "Phantom");
+  const phantomReadyState = phantomWallet?.readyState ?? WalletReadyState.Unsupported;
+  const phantomAvailable =
+    phantomReadyState === WalletReadyState.Installed ||
+    phantomReadyState === WalletReadyState.Loadable;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -24,26 +30,43 @@ export function WalletButton() {
   useEffect(() => {
     if (pendingConnect.current && wallet && !connected && !connecting) {
       pendingConnect.current = false;
-      connect().catch(() => {});
+      connect().catch(() => {
+        setStatusMessage("Wallet connection was rejected or could not be completed.");
+      });
     }
   }, [wallet, connected, connecting, connect]);
 
+  useEffect(() => {
+    if (connected) {
+      setStatusMessage(null);
+    }
+  }, [connected]);
+
   const handleConnect = useCallback(async () => {
+    setStatusMessage(null);
+
+    if (!phantomAvailable) {
+      window.open("https://phantom.app/", "_blank", "noopener,noreferrer");
+      setStatusMessage("Phantom was not detected in this browser. Opened install page.");
+      return;
+    }
+
     try {
-      if (!wallet) {
+      if (!wallet || wallet.adapter.name !== "Phantom") {
         pendingConnect.current = true;
-        select("Phantom" as WalletName);
+        select(phantomWallet?.adapter.name ?? null);
       } else {
         await connect();
       }
     } catch {
-      // User rejected or Phantom not installed
+      setStatusMessage("Wallet connection was rejected or could not be completed.");
     }
-  }, [wallet, select, connect]);
+  }, [wallet, select, connect, phantomAvailable, phantomWallet]);
 
   const handleDisconnect = useCallback(async () => {
     await disconnect();
     setMenuOpen(false);
+    setStatusMessage(null);
   }, [disconnect]);
 
   const truncatedAddress = publicKey
@@ -182,33 +205,54 @@ export function WalletButton() {
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleConnect}
-      disabled={connecting}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "7px 14px",
-        borderRadius: 999,
-        background: "rgba(171,71,188,0.1)",
-        border: "1px solid rgba(171,71,188,0.32)",
-        fontFamily: "var(--font-mono)",
-        fontSize: 11,
-        fontWeight: 700,
-        letterSpacing: "0.14em",
-        textTransform: "uppercase",
-        color: "#ce93d8",
-        cursor: connecting ? "wait" : "pointer",
-        backdropFilter: "blur(8px)",
-        opacity: connecting ? 0.6 : 1,
-        transition: "all 0.18s ease",
-      }}
-    >
-      <PhantomIcon />
-      {connecting ? "Connecting..." : "Connect"}
-    </button>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+      <button
+        type="button"
+        onClick={handleConnect}
+        disabled={connecting}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "7px 14px",
+          borderRadius: 999,
+          background: "rgba(171,71,188,0.1)",
+          border: "1px solid rgba(171,71,188,0.32)",
+          fontFamily: "var(--font-mono)",
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: "0.14em",
+          textTransform: "uppercase",
+          color: "#ce93d8",
+          cursor: connecting ? "wait" : "pointer",
+          backdropFilter: "blur(8px)",
+          opacity: connecting ? 0.6 : 1,
+          transition: "all 0.18s ease",
+        }}
+      >
+        <PhantomIcon />
+        {connecting ? "Connecting..." : phantomAvailable ? "Connect" : "Install Phantom"}
+      </button>
+
+      {statusMessage && (
+        <div
+          style={{
+            maxWidth: 220,
+            padding: "8px 10px",
+            borderRadius: 12,
+            background: "rgba(10, 14, 23, 0.92)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            fontFamily: "var(--font-mono)",
+            fontSize: 10,
+            lineHeight: 1.5,
+            color: "var(--text-secondary)",
+            textAlign: "right",
+          }}
+        >
+          {statusMessage}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -3,6 +3,7 @@ from uuid import UUID, uuid4
 
 from app.schemas.claim import ClaimSchema
 from app.schemas.market import ClaimsGenerateResponse, MarketResponse
+from app.schemas.paper_trading import PaperPositionSummary, PaperTradeResponse, PaperTradingResponse
 from app.schemas.report import ReportResponse
 from app.schemas.simulation import (
     AgentSummary,
@@ -157,6 +158,7 @@ def build_report_response(*, simulation_id: UUID) -> ReportResponse:
     return ReportResponse(
         id=uuid4(),
         simulation_id=simulation_id,
+        market_id=uuid4(),
         market_probability=0.67,
         simulation_probability=0.58,
         summary="The simulation converged below market pricing after agents weighted inflation risk against softer labor data.",
@@ -168,4 +170,36 @@ def build_report_response(*, simulation_id: UUID) -> ReportResponse:
         faction_analysis="Two factions formed: one expecting a near-term cut, one expecting inflation to delay easing.",
         trust_insights="Quantitative and data-skeptic agents became more influential as the run progressed.",
         recommendation="Treat current market pricing as slightly overconfident until fresh inflation data arrives.",
+    )
+
+
+def build_paper_trading_response(*, market_id: UUID, simulation_id: UUID, report_id: UUID) -> PaperTradingResponse:
+    return PaperTradingResponse(
+        position=PaperPositionSummary(
+            id=uuid4(),
+            market_id=market_id,
+            simulation_id=simulation_id,
+            report_id=report_id,
+            side="no",
+            avg_entry_price=0.33,
+            shares=75.75758,
+            total_cost=25.0,
+            current_price=0.42,
+            market_probability=0.58,
+            current_value=31.81818,
+            unrealized_pnl=6.81818,
+            unrealized_pnl_pct=0.2727,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        ),
+        trades=[
+            PaperTradeResponse(
+                id=uuid4(),
+                side="no",
+                price=0.33,
+                shares=75.75758,
+                amount=25.0,
+                created_at=datetime.now(UTC),
+            )
+        ],
     )
