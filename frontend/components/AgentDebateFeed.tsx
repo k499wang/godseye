@@ -6,6 +6,7 @@ import { ARCHETYPE_COLORS, ARCHETYPE_LABELS } from "@/lib/constants";
 interface AgentDebateFeedProps {
   agents: AgentSummary[];
   tickSnapshot: TickSnapshot | null;
+  previousTickSnapshot: TickSnapshot | null;
   currentTick: number;
 }
 
@@ -26,6 +27,7 @@ function beliefLabel(belief: number): string {
 export function AgentDebateFeed({
   agents,
   tickSnapshot,
+  previousTickSnapshot,
   currentTick,
 }: AgentDebateFeedProps) {
   if (!tickSnapshot) {
@@ -49,9 +51,13 @@ export function AgentDebateFeed({
     return sentence.length > 88 ? `${sentence.slice(0, 85)}...` : sentence;
   };
 
+  const previousStateById = new Map(
+    (previousTickSnapshot?.agent_states ?? []).map((state) => [state.agent_id, state])
+  );
+
   return (
-    <div className="flex h-full flex-col overflow-y-auto rounded-[30px] border border-white/8 bg-[rgba(255,255,255,0.025)] p-4">
-      <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-5 border-b border-[rgba(245,158,11,0.16)] bg-[rgba(8,11,18,0.96)] px-4 pb-4 pt-4 backdrop-blur-xl">
+    <div className="flex h-full flex-col overflow-y-auto rounded-[24px] border border-white/8 bg-[rgba(255,255,255,0.02)] p-3">
+      <div className="sticky top-0 z-10 -mx-3 -mt-3 mb-3 border-b border-white/8 bg-[rgba(8,11,18,0.94)] px-3 pb-3 pt-3 backdrop-blur-xl">
         <div className="flex flex-wrap items-center gap-3">
           <span className="eyebrow text-[var(--accent)]">
             Tick {String(currentTick).padStart(2, "0")}
@@ -71,52 +77,60 @@ export function AgentDebateFeed({
       {tickSnapshot.claim_shares.map((share, index) => (
         <div
           key={`share-${index}`}
-          className="mb-4 rounded-[24px] border border-[rgba(52,211,153,0.24)] bg-[rgba(52,211,153,0.05)] p-4"
+          className="mb-3 rounded-[18px] border border-[rgba(52,211,153,0.2)] bg-[rgba(52,211,153,0.04)] p-3"
         >
-          <div className="mb-3 flex flex-wrap items-center gap-3">
-            <span className="ui-mono rounded-full border border-[rgba(52,211,153,0.3)] bg-[rgba(52,211,153,0.12)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--success)]">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="ui-mono rounded-full border border-[rgba(52,211,153,0.24)] bg-[rgba(52,211,153,0.08)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--success)]">
               Propagation
             </span>
-            <span className="text-sm text-[var(--text-secondary)]">
+            <span className="text-[13px] text-[var(--text-secondary)]">
               {share.from_agent_name} to {share.to_agent_name}
             </span>
           </div>
-          <div className="rounded-[18px] border border-white/8 bg-[rgba(9,14,21,0.55)] p-4">
-            <div className="ui-mono mb-2 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+          <div className="rounded-[14px] border border-white/6 bg-[rgba(9,14,21,0.45)] px-3 py-2.5">
+            <div className="ui-mono mb-1 text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
               Active claim
             </div>
-            <p className="text-sm leading-6 text-[var(--text-primary)]">
+            <p className="text-[13px] leading-5 text-[var(--text-primary)]">
               {summarizeReasoning(share.claim_text)}
             </p>
           </div>
-          <div className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
+          <div className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">
             {summarizeReasoning(share.commentary)}
           </div>
         </div>
       ))}
 
-      <div className="space-y-4">
+      <div className="space-y-2.5">
         {states.map((state) => {
           const agent = agents.find((entry) => entry.id === state.agent_id);
           if (!agent) return null;
 
           const color = ARCHETYPE_COLORS[agent.archetype] ?? "#ffffff";
           const beliefTone = beliefColor(state.belief);
+          const previousBelief = previousStateById.get(state.agent_id)?.belief ?? agent.initial_belief;
+          const beliefDelta = state.belief - previousBelief;
+          const deltaLabel =
+            beliefDelta === 0
+              ? "No change"
+              : `${beliefDelta > 0 ? "+" : ""}${Math.round(beliefDelta * 100)} pts ${
+                  beliefDelta > 0 ? "up" : "down"
+                }`;
 
           return (
-            <div key={state.agent_id} className="rounded-[24px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-4">
-              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div key={state.agent_id} className="rounded-[18px] border border-white/8 bg-[rgba(255,255,255,0.025)] p-3">
+              <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
                 <div className="flex items-center gap-3">
                   <div
-                    className="h-2.5 w-2.5 rounded-full"
+                    className="h-2 w-2 rounded-full"
                     style={{ background: color, boxShadow: `0 0 10px ${color}66` }}
                   />
                   <div>
-                    <div className="text-base font-semibold text-[var(--text-bright)]">
+                    <div className="text-sm font-semibold text-[var(--text-bright)]">
                       {state.name}
                     </div>
                     <div
-                      className="ui-mono text-[11px] uppercase tracking-[0.18em]"
+                      className="ui-mono text-[10px] uppercase tracking-[0.14em]"
                       style={{ color: `${color}dd` }}
                     >
                       {ARCHETYPE_LABELS[agent.archetype]}
@@ -126,7 +140,7 @@ export function AgentDebateFeed({
 
                 <div className="flex flex-wrap items-center gap-2">
                   <span
-                    className="ui-mono rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                    className="ui-mono rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]"
                     style={{
                       color: beliefTone,
                       borderColor:
@@ -146,7 +160,7 @@ export function AgentDebateFeed({
                     {beliefLabel(state.belief)}
                   </span>
                   <span
-                    className="ui-mono text-lg font-bold"
+                    className="ui-mono text-base font-bold"
                     style={{ color: beliefTone }}
                   >
                     {Math.round(state.belief * 100)}%
@@ -154,14 +168,17 @@ export function AgentDebateFeed({
                 </div>
               </div>
 
-              <div className="mb-3 flex flex-wrap items-center gap-3 text-sm text-[var(--text-muted)]">
-                <span className="ui-mono uppercase tracking-[0.16em]">
-                  {state.action_taken === "share_claim" ? "Shared claim" : "Updated belief"}
+              <div className="mb-2 flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-muted)]">
+                <span
+                  className="ui-mono uppercase tracking-[0.14em]"
+                  style={{ color: beliefDelta >= 0 ? "var(--success)" : "var(--danger)" }}
+                >
+                  {deltaLabel}
                 </span>
                 <span>Confidence {Math.round(state.confidence * 100)}%</span>
               </div>
 
-              <div className="rounded-[18px] border border-white/6 bg-[rgba(8,11,18,0.46)] px-4 py-3 text-sm leading-6 text-[var(--text-secondary)]">
+              <div className="rounded-[14px] border border-white/6 bg-[rgba(8,11,18,0.42)] px-3 py-2.5 text-[12px] leading-5 text-[var(--text-secondary)]">
                 {summarizeReasoning(state.reasoning)}
               </div>
             </div>
@@ -170,8 +187,8 @@ export function AgentDebateFeed({
       </div>
 
       {tickSnapshot.trust_updates.length > 0 && (
-        <div className="mt-5 border-t border-white/8 pt-5">
-          <div className="eyebrow mb-3">Trust updates</div>
+        <div className="mt-4 border-t border-white/8 pt-4">
+          <div className="eyebrow mb-2">Trust updates</div>
           <div className="space-y-2">
             {tickSnapshot.trust_updates.map((update, index) => {
               const from = agents.find((agent) => agent.id === update.from_agent_id);
@@ -181,7 +198,7 @@ export function AgentDebateFeed({
               return (
                 <div
                   key={index}
-                  className="rounded-[18px] border border-white/8 bg-[rgba(255,255,255,0.025)] px-4 py-3 text-sm text-[var(--text-secondary)]"
+                  className="rounded-[14px] border border-white/8 bg-[rgba(255,255,255,0.02)] px-3 py-2.5 text-[12px] text-[var(--text-secondary)]"
                 >
                   <span className="font-medium text-[var(--text-bright)]">
                     {from?.name ?? update.from_agent_id}

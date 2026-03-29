@@ -208,34 +208,34 @@ function SimulationLoadState({
           : "Generating first tick";
 
   return (
-    <div className="w-full max-w-5xl overflow-hidden rounded-[36px] border border-white/10 bg-[linear-gradient(180deg,rgba(13,17,25,0.98),rgba(7,10,18,0.98))] shadow-[0_30px_100px_rgba(0,0,0,0.35)]">
-      <div className="grid min-h-[620px] grid-cols-[1.2fr_0.9fr]">
-        <div className="flex flex-col justify-between border-r border-white/8 p-10">
+    <div className="w-full max-w-[72rem] rounded-[20px] border border-white/8 bg-[rgba(10,14,22,0.94)] shadow-[0_14px_44px_rgba(0,0,0,0.22)]">
+      <div className="grid min-h-[500px] grid-cols-[1.2fr_0.9fr]">
+        <div className="flex flex-col justify-between border-r border-white/8 p-6">
           <div>
-            <div className="mb-6 flex items-center gap-4">
+            <div className="mb-4 flex items-center gap-3">
               <GodseyeLogo size="sm" />
-              <div className="ui-mono rounded-full border border-[rgba(245,158,11,0.28)] bg-[rgba(245,158,11,0.08)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+              <div className="ui-mono rounded-full border border-[rgba(245,158,11,0.2)] bg-[rgba(245,158,11,0.06)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
                 {statusLabel}
               </div>
             </div>
 
-            <div className="mb-3 text-[13px] font-medium uppercase tracking-[0.22em] text-[var(--accent)]">
+            <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
               Simulation boot sequence
             </div>
-            <h1 className="max-w-2xl text-4xl font-semibold tracking-[-0.04em] text-[var(--text-bright)]">
+            <h1 className="max-w-2xl text-[1.7rem] font-semibold tracking-[-0.04em] text-[var(--text-bright)]">
               Bringing the simulation online tick by tick.
             </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-[var(--text-secondary)]">
+            <p className="mt-2 max-w-2xl text-[13px] leading-5 text-[var(--text-secondary)]">
               The model is loading the existing run, assembling the agent network, and generating the opening interactions before the replay becomes interactive.
             </p>
           </div>
 
-          <div className="mt-10">
-            <div className="mb-3 flex items-center justify-between text-xs uppercase tracking-[0.16em] text-[var(--text-muted)]">
+          <div className="mt-6">
+            <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
               <span>Progress</span>
               <span className="ui-mono text-[var(--text-bright)]">{Math.round(progress)}%</span>
             </div>
-            <div className="h-3 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
+            <div className="h-2 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
               <div
                 className="h-full rounded-full bg-[linear-gradient(90deg,var(--accent),#60a5fa)] transition-all duration-700 ease-out"
                 style={{ width: `${progress}%` }}
@@ -244,8 +244,8 @@ function SimulationLoadState({
           </div>
         </div>
 
-        <div className="flex flex-col justify-between p-10">
-          <div className="space-y-5">
+        <div className="flex flex-col justify-between p-6">
+          <div className="space-y-2.5">
             {steps.map((step, index) => {
               const state =
                 index < currentStepIndex
@@ -257,7 +257,7 @@ function SimulationLoadState({
               return (
                 <div
                   key={step.label}
-                  className="rounded-[24px] border px-5 py-4 transition-all duration-500"
+                  className="rounded-[14px] border px-3.5 py-2.5 transition-all duration-500"
                   style={{
                     borderColor:
                       state === "done"
@@ -273,9 +273,9 @@ function SimulationLoadState({
                           : "rgba(255,255,255,0.03)",
                   }}
                 >
-                  <div className="mb-2 flex items-center gap-3">
+                  <div className="mb-1.5 flex items-center gap-3">
                     <div
-                      className="flex h-8 w-8 items-center justify-center rounded-full border ui-mono text-xs font-bold"
+                      className="flex h-7 w-7 items-center justify-center rounded-full border ui-mono text-[10px] font-bold"
                       style={{
                         borderColor:
                           state === "done"
@@ -300,45 +300,45 @@ function SimulationLoadState({
                       {state === "done" ? "OK" : String(index + 1).padStart(2, "0")}
                     </div>
                     <div>
-                      <div className="ui-mono text-xs uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                      <div className="ui-mono text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
                         {step.label}
                       </div>
-                      <div className="text-sm font-medium text-[var(--text-bright)]">
+                      <div className="text-[13px] font-medium text-[var(--text-bright)]">
                         {state === "active" ? "In progress" : state === "done" ? "Complete" : "Queued"}
                       </div>
                     </div>
                   </div>
-                  <div className="text-sm leading-6 text-[var(--text-secondary)]">{step.detail}</div>
+                  <div className="text-[11px] leading-4.5 text-[var(--text-secondary)]">{step.detail}</div>
                 </div>
               );
             })}
           </div>
 
-          <div className="mt-8 rounded-[24px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-5">
-            <div className="ui-mono mb-2 text-xs uppercase tracking-[0.16em] text-[var(--text-muted)]">
+          <div className="mt-4 rounded-[14px] border border-white/8 bg-[rgba(255,255,255,0.02)] p-3.5">
+            <div className="ui-mono mb-2 text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
               Live context
             </div>
-            <div className="grid grid-cols-2 gap-4 text-sm text-[var(--text-secondary)]">
+            <div className="grid grid-cols-2 gap-3 text-[12px] text-[var(--text-secondary)]">
               <div>
-                <div className="ui-mono text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                <div className="ui-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)]">
                   Simulation ID
                 </div>
                 <div className="mt-1 text-[var(--text-bright)]">{simulationId.slice(0, 8).toUpperCase()}</div>
               </div>
               <div>
-                <div className="ui-mono text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                <div className="ui-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)]">
                   Current status
                 </div>
                 <div className="mt-1 text-[var(--text-bright)]">{simulation?.status ?? "loading"}</div>
               </div>
               <div>
-                <div className="ui-mono text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                <div className="ui-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)]">
                   Agents loaded
                 </div>
                 <div className="mt-1 text-[var(--text-bright)]">{simulation?.agents.length ?? 0}</div>
               </div>
               <div>
-                <div className="ui-mono text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                <div className="ui-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)]">
                   Ticks available
                 </div>
                 <div className="mt-1 text-[var(--text-bright)]">{simulation?.tick_data.length ?? 0}</div>

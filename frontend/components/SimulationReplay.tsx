@@ -59,6 +59,8 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
 
   const currentSnapshot: TickSnapshot | null =
     tickData.find((t) => t.tick === currentTick) ?? null;
+  const previousSnapshot: TickSnapshot | null =
+    tickData.find((t) => t.tick === currentTick - 1) ?? null;
 
   const handleTickSelect = useCallback(
     (tick: number) => {
@@ -94,7 +96,7 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
 
   return (
     <div className="min-h-[1500px] bg-[var(--bg-base)] text-[var(--text-primary)]">
-      <div className="flex items-center justify-between gap-4 border-b border-white/8 px-5 py-3">
+      <div className="flex items-center justify-between gap-4 border-b border-white/8 px-3.5 py-2">
         <div className="flex flex-wrap items-center gap-3">
           <span className="eyebrow">Simulation replay</span>
           <span className="ui-mono text-sm text-[var(--text-muted)]">
@@ -103,7 +105,7 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
           <StatusBadge status={simulation.status} />
         </div>
 
-        <div className="flex flex-wrap items-center gap-5">
+        <div className="flex flex-wrap items-center gap-4">
           {consensusAtTick !== null && (
             <MetricInline
               label="Consensus"
@@ -122,8 +124,8 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
         </div>
       </div>
 
-      <div className="border-b border-white/6 px-5 py-4">
-        <div className="mb-3 flex items-center gap-3">
+      <div className="border-b border-white/6 px-3.5 py-2.5">
+        <div className="mb-1.5 flex items-center gap-3">
           <span className="eyebrow">Tick</span>
           <span className="ui-mono text-sm font-semibold text-[var(--accent)]">
             {String(currentTick).padStart(2, "0")}
@@ -166,9 +168,9 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
           </div>
         </div>
 
-        <div className="mt-4 flex gap-2">
+        <div className="mt-2.5 flex gap-2">
           <button
-            className="ui-mono rounded-full border border-white/12 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            className="ui-mono rounded-full border border-white/12 px-3.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
             onClick={() => {
               const index = tickData.findIndex((tick) => tick.tick === currentTick);
               if (index > 0) setCurrentTick(tickData[index - 1].tick);
@@ -177,7 +179,7 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
             Prev
           </button>
           <button
-            className="ui-mono rounded-full border border-white/12 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            className="ui-mono rounded-full border border-white/12 px-3.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
             onClick={() => {
               const index = tickData.findIndex((tick) => tick.tick === currentTick);
               if (index < tickData.length - 1) setCurrentTick(tickData[index + 1].tick);
@@ -189,8 +191,8 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
       </div>
 
       <div className="flex">
-        <div className="flex flex-col border-r border-white/8" style={{ width: "64%" }}>
-          <div className="border-b border-white/6 p-4">
+        <div className="flex flex-col border-r border-white/8" style={{ width: "68%" }}>
+          <div className="border-b border-white/6 p-2.5">
             <AgentConstellation
               agents={agents}
               tickData={tickData}
@@ -200,8 +202,10 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
             />
           </div>
 
-          <div className="p-4" style={{ minHeight: 340 }}>
-            <div className="eyebrow mb-3">Belief motion timeline</div>
+          <div className="p-2.5" style={{ minHeight: 320 }}>
+            <div className="mb-1.5 flex items-center gap-2">
+              <span className="eyebrow">Belief motion timeline</span>
+            </div>
             <div style={{ height: 280 }}>
               <BeliefChart
                 agents={agents}
@@ -215,11 +219,14 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
         </div>
 
         <div className="flex flex-1 flex-col">
-          <div className="p-4">
-            <div className="eyebrow mb-3">Claim propagation stream</div>
+          <div className="p-2.5">
+            <div className="mb-1.5 flex items-center gap-2">
+              <span className="eyebrow">Claim propagation stream</span>
+            </div>
             <AgentDebateFeed
               agents={agents}
               tickSnapshot={currentSnapshot}
+              previousTickSnapshot={previousSnapshot}
               currentTick={currentTick}
             />
           </div>
