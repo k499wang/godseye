@@ -106,28 +106,19 @@ function MarkerContent({
         transition: "width 0.2s cubic-bezier(0.4,0,0.2,1), height 0.2s cubic-bezier(0.4,0,0.2,1)",
       }}
     >
-      {/* Outer pulse */}
-      <div
-        style={{
-          position: "absolute",
-          inset: -9,
-          borderRadius: "50%",
-          border: `1px solid ${color}`,
-          opacity: isActive ? 0.55 : 0.28,
-          animation: "globePulse 2.2s ease-out infinite",
-        }}
-      />
-      {/* Inner pulse */}
-      <div
-        style={{
-          position: "absolute",
-          inset: -4,
-          borderRadius: "50%",
-          border: `1px solid ${color}`,
-          opacity: isActive ? 0.35 : 0.18,
-          animation: "globePulse 2.2s ease-out infinite 0.8s",
-        }}
-      />
+      {/* Pulse ring — only shown when active */}
+      {isActive && (
+        <div
+          style={{
+            position: "absolute",
+            inset: -9,
+            borderRadius: "50%",
+            border: `1px solid ${color}`,
+            opacity: 0.55,
+            animation: "globePulse 2.2s ease-out infinite",
+          }}
+        />
+      )}
       {/* Core */}
       <div
         style={{

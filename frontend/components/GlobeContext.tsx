@@ -20,6 +20,7 @@ const ALL_CATEGORIES: GlobeEventCategory[] = [
   "tech",
   "energy",
   "macro",
+  "sports",
 ];
 
 interface GlobeContextValue {
