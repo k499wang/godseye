@@ -3,9 +3,10 @@
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import axios from "axios";
 import { useGlobe } from "./GlobeContext";
 import { CATEGORY_COLOR } from "@/lib/globeData";
-import { buildWorld, importMarket } from "@/lib/api";
+import { buildWorld, getSimulation, importMarket, startSimulation } from "@/lib/api";
 
 export function EventPanel() {
   const {
@@ -72,6 +73,21 @@ export function EventPanel() {
       }
 
       const builtSimulation = await buildWorld(sessionId);
+      let activeSimulation = builtSimulation;
+
+      if (!(builtSimulation.status === "running" || builtSimulation.status === "complete")) {
+        try {
+          activeSimulation = await startSimulation(builtSimulation.id);
+        } catch (error) {
+          if (axios.isAxiosError(error) && error.response?.status === 409) {
+            activeSimulation = await getSimulation(builtSimulation.id);
+          } else {
+            throw error;
+          }
+        }
+      }
+
+      await refreshEvents();
       stopAutoSpin();
       router.push(`/simulation/${builtSimulation.id}?event=${encodeURIComponent(event.id)}`);
       void refreshEvents();

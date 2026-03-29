@@ -95,17 +95,11 @@ async def start_simulation(
             detail={"detail": "Simulation not found", "code": "SIMULATION_NOT_FOUND"},
         )
 
-    if simulation.status == "complete":
+    # Starting a simulation should be idempotent from the client's perspective.
+    # If the sim is already active or finished, return its current state instead
+    # of queueing duplicate workers.
+    if simulation.status in {"running", "complete"}:
         return _to_simulation_response(simulation)
-
-    if simulation.status == "running":
-        return _to_simulation_response(simulation)
-
-    if simulation.status == "building" and len(simulation.agents) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"detail": "Simulation world is still building", "code": "SIMULATION_BUILDING"},
-        )
 
     simulation.status = "running"
     await db.commit()
