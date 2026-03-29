@@ -79,6 +79,7 @@ class SimulationRunnerShareTests(unittest.TestCase):
 
     def test_resolve_share_claim_reuses_existing_matching_text(self) -> None:
         claims_by_id = {claim.id: claim for claim in self.visible_claims}
+        claim_origins = {claim.id: None for claim in self.visible_claims}
 
         resolved = self.runner._resolve_share_claim(
             action={
@@ -91,6 +92,7 @@ class SimulationRunnerShareTests(unittest.TestCase):
             visible_claims=self.visible_claims,
             incoming_claims=[],
             claims_by_id=claims_by_id,
+            claim_origins=claim_origins,
         )
 
         self.assertIsNotNone(resolved)
@@ -98,6 +100,7 @@ class SimulationRunnerShareTests(unittest.TestCase):
 
     def test_resolve_share_claim_creates_new_claim_when_text_is_new(self) -> None:
         claims_by_id = {claim.id: claim for claim in self.visible_claims}
+        claim_origins = {claim.id: None for claim in self.visible_claims}
 
         resolved = self.runner._resolve_share_claim(
             action={
@@ -109,6 +112,7 @@ class SimulationRunnerShareTests(unittest.TestCase):
             visible_claims=self.visible_claims,
             incoming_claims=[],
             claims_by_id=claims_by_id,
+            claim_origins=claim_origins,
         )
 
         self.assertIsNotNone(resolved)
@@ -121,6 +125,84 @@ class SimulationRunnerShareTests(unittest.TestCase):
         )
         self.assertGreaterEqual(resolved.strength_score, 0.35)
         self.assertGreaterEqual(resolved.novelty_score, 0.25)
+
+    def test_resolve_share_claim_prefers_strong_self_originated_claim(self) -> None:
+        external_claim = Claim(
+            id="claim-external",
+            text="The market is too complacent about inflation persistence.",
+            stance="no",
+            strength_score=0.76,
+            novelty_score=0.4,
+        )
+        own_claim = Claim(
+            id="claim-own",
+            text="Labor softness is spreading into services hiring.",
+            stance="yes",
+            strength_score=0.88,
+            novelty_score=0.71,
+        )
+        visible_claims = [external_claim, own_claim]
+        claims_by_id = {claim.id: claim for claim in visible_claims}
+        claim_origins = {
+            "claim-external": "agent-b",
+            "claim-own": "agent-a",
+        }
+
+        resolved = self.runner._resolve_share_claim(
+            action={
+                "action": "share_claim",
+                "claim_id": "claim-external",
+                "target_agent_ids": ["agent-b", "agent-c"],
+            },
+            agent=self.agent,
+            visible_claims=visible_claims,
+            incoming_claims=[],
+            claims_by_id=claims_by_id,
+            claim_origins=claim_origins,
+        )
+
+        self.assertIsNotNone(resolved)
+        assert resolved is not None
+        self.assertEqual(resolved.id, "claim-own")
+
+    def test_resolve_share_claim_falls_back_to_external_if_own_claim_is_weak(self) -> None:
+        external_claim = Claim(
+            id="claim-external",
+            text="The market is too complacent about inflation persistence.",
+            stance="no",
+            strength_score=0.9,
+            novelty_score=0.82,
+        )
+        own_claim = Claim(
+            id="claim-own",
+            text="A minor anecdote from one regional bank is worth watching.",
+            stance="yes",
+            strength_score=0.38,
+            novelty_score=0.31,
+        )
+        visible_claims = [external_claim, own_claim]
+        claims_by_id = {claim.id: claim for claim in visible_claims}
+        claim_origins = {
+            "claim-external": "agent-b",
+            "claim-own": "agent-a",
+        }
+
+        resolved = self.runner._resolve_share_claim(
+            action={
+                "action": "share_claim",
+                "claim_id": "claim-external",
+                "target_agent_ids": ["agent-b", "agent-c"],
+            },
+            agent=self.agent,
+            visible_claims=visible_claims,
+            incoming_claims=[],
+            claims_by_id=claims_by_id,
+            claim_origins=claim_origins,
+        )
+
+        self.assertIsNotNone(resolved)
+        assert resolved is not None
+        self.assertEqual(resolved.id, "claim-external")
 
     def test_create_claim_shares_carries_generated_claim_metadata(self) -> None:
         generated_claim = Claim(

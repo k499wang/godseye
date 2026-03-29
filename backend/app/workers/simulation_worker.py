@@ -472,7 +472,7 @@ async def _generate_report(
 ) -> Any:
     """Generate and persist the report. Returns ReportData or None on failure."""
     try:
-        from app.services.report_agent import report_agent, ReportData
+        from app.services.report_agent import report_agent
 
         report_data = await report_agent.generate(
             simulation_id=simulation_id,
@@ -487,7 +487,21 @@ async def _generate_report(
         return report_data
     except Exception as e:
         logger.warning("Report generation failed: %s", e)
-        return None
+        try:
+            from app.services.report_agent import report_agent
+
+            fallback_report = report_agent.build_fallback_report(
+                simulation_id=simulation_id,
+                result=result,
+                market_question=market_question,
+                market_probability=market_probability,
+            )
+            await _persist_report(db, fallback_report)
+            logger.info("Persisted fallback report for simulation %s", simulation_id)
+            return fallback_report
+        except Exception as fallback_err:
+            logger.warning("Fallback report generation failed: %s", fallback_err)
+            return None
 
 
 async def _persist_report(db, report_data) -> None:
@@ -496,18 +510,36 @@ async def _persist_report(db, report_data) -> None:
         return
     try:
         from app.models.report import Report
+        existing_report = await db.get(Report, UUID(report_data.id))
+        if existing_report is None:
+            from sqlalchemy import select
 
-        db.add(Report(
-            id=UUID(report_data.id),
-            simulation_id=UUID(report_data.simulation_id),
-            market_probability=report_data.market_probability,
-            simulation_probability=report_data.simulation_probability,
-            summary=report_data.summary,
-            key_drivers=report_data.key_drivers,
-            faction_analysis=report_data.faction_analysis,
-            trust_insights=report_data.trust_insights,
-            recommendation=report_data.recommendation,
-        ))
+            existing_report = (
+                await db.execute(
+                    select(Report).where(Report.simulation_id == UUID(report_data.simulation_id))
+                )
+            ).scalar_one_or_none()
+
+        if existing_report is None:
+            db.add(Report(
+                id=UUID(report_data.id),
+                simulation_id=UUID(report_data.simulation_id),
+                market_probability=report_data.market_probability,
+                simulation_probability=report_data.simulation_probability,
+                summary=report_data.summary,
+                key_drivers=report_data.key_drivers,
+                faction_analysis=report_data.faction_analysis,
+                trust_insights=report_data.trust_insights,
+                recommendation=report_data.recommendation,
+            ))
+        else:
+            existing_report.market_probability = report_data.market_probability
+            existing_report.simulation_probability = report_data.simulation_probability
+            existing_report.summary = report_data.summary
+            existing_report.key_drivers = report_data.key_drivers
+            existing_report.faction_analysis = report_data.faction_analysis
+            existing_report.trust_insights = report_data.trust_insights
+            existing_report.recommendation = report_data.recommendation
         await db.commit()
     except Exception as e:
         logger.warning("Failed to persist report: %s", e)

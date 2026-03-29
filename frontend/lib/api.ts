@@ -16,6 +16,10 @@ const client = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+type SimulationRequestOptions = {
+  demo?: boolean;
+};
+
 export async function importMarket(url: string): Promise<MarketResponse> {
   const res = await client.post<MarketResponse>("/api/markets/import", { url });
   return res.data;
@@ -28,16 +32,32 @@ export async function generateClaims(marketId: string): Promise<ClaimsGenerateRe
   return res.data;
 }
 
-export async function buildWorld(sessionId: string): Promise<SimulationResponse> {
-  const res = await client.post<SimulationResponse>("/api/simulations/build-world", {
-    session_id: sessionId,
-  });
+export async function buildWorld(
+  sessionId: string,
+  options: SimulationRequestOptions = {}
+): Promise<SimulationResponse> {
+  const res = await client.post<SimulationResponse>(
+    "/api/simulations/build-world",
+    {
+      session_id: sessionId,
+    },
+    {
+      params: options.demo ? { demo: true } : undefined,
+    }
+  );
   return res.data;
 }
 
-export async function startSimulation(simulationId: string): Promise<SimulationResponse> {
+export async function startSimulation(
+  simulationId: string,
+  options: SimulationRequestOptions = {}
+): Promise<SimulationResponse> {
   const res = await client.post<SimulationResponse>(
-    `/api/simulations/${simulationId}/start`
+    `/api/simulations/${simulationId}/start`,
+    undefined,
+    {
+      params: options.demo ? { demo: true } : undefined,
+    }
   );
   return res.data;
 }

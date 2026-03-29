@@ -23,8 +23,14 @@ SimulationStatus = Literal["pending", "building", "running", "complete", "failed
 class Simulation(Base):
     __tablename__ = "simulations"
     __table_args__ = (
-        CheckConstraint("current_tick >= 0 AND current_tick <= 30", name="ck_simulations_current_tick_range"),
-        CheckConstraint("total_ticks = 30", name="ck_simulations_total_ticks_fixed"),
+        CheckConstraint(
+            "current_tick >= 0 AND current_tick <= total_ticks",
+            name="ck_simulations_current_tick_range",
+        ),
+        CheckConstraint(
+            "total_ticks IN (10, 30)",
+            name="ck_simulations_total_ticks_allowed",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)

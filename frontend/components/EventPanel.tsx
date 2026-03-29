@@ -19,6 +19,7 @@ export function EventPanel() {
   const router = useRouter();
   const [isActionPending, setIsActionPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   const event = events.find((entry) => entry.id === selectedEventId) ?? null;
   const isOpen = !!selectedEventId;
@@ -44,6 +45,10 @@ export function EventPanel() {
     setIsActionPending(false);
   }, [selectedEventId]);
 
+  useEffect(() => {
+    setIsDemoMode(false);
+  }, [selectedEventId]);
+
   const primaryActionLabel = useMemo(() => {
     if (!event) return "";
     if (event.simulationId) return "Open simulation";
@@ -56,7 +61,9 @@ export function EventPanel() {
 
     if (event.simulationId) {
       stopAutoSpin();
-      router.push(`/simulation/${event.simulationId}?event=${encodeURIComponent(event.id)}`);
+      router.push(
+        `/simulation/${event.simulationId}?event=${encodeURIComponent(event.id)}${isDemoMode ? "&demo=1" : ""}`
+      );
       return;
     }
 
@@ -78,9 +85,11 @@ export function EventPanel() {
       }
 
       await generateClaims(marketId);
-      const builtSimulation = await buildWorld(sessionId);
+      const builtSimulation = await buildWorld(sessionId, { demo: isDemoMode });
       stopAutoSpin();
-      router.push(`/simulation/${builtSimulation.id}?event=${encodeURIComponent(event.id)}`);
+      router.push(
+        `/simulation/${builtSimulation.id}?event=${encodeURIComponent(event.id)}${isDemoMode ? "&demo=1" : ""}`
+      );
       void refreshEvents();
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -100,7 +109,7 @@ export function EventPanel() {
     } finally {
       setIsActionPending(false);
     }
-  }, [event, isActionPending, refreshEvents, router, stopAutoSpin]);
+  }, [event, isActionPending, isDemoMode, refreshEvents, router, stopAutoSpin]);
 
   return (
     <div
@@ -306,6 +315,78 @@ export function EventPanel() {
                   </span>
                 </div>
               </PanelSection>
+
+              {!event.simulationId && (
+                <PanelSection label="Launch mode">
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 16,
+                      marginTop: 10,
+                      padding: "14px 16px",
+                      borderRadius: 18,
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      cursor: isActionPending ? "default" : "pointer",
+                      opacity: isActionPending ? 0.7 : 1,
+                    }}
+                  >
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <span
+                        className="ui-mono"
+                        style={{
+                          fontSize: 11,
+                          letterSpacing: "0.16em",
+                          textTransform: "uppercase",
+                          color: "var(--text-bright)",
+                        }}
+                      >
+                        Demo mode
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 14,
+                          lineHeight: 1.5,
+                          color: "var(--text-secondary)",
+                        }}
+                      >
+                        Uses fallback agent profiles and runs a shorter 10-tick simulation.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      aria-pressed={isDemoMode}
+                      disabled={isActionPending}
+                      onClick={() => setIsDemoMode((value) => !value)}
+                      style={{
+                        position: "relative",
+                        width: 56,
+                        height: 32,
+                        flexShrink: 0,
+                        borderRadius: 999,
+                        border: `1px solid ${isDemoMode ? `${color}88` : "rgba(255,255,255,0.14)"}`,
+                        background: isDemoMode ? `${color}22` : "rgba(255,255,255,0.06)",
+                        transition: "all 0.2s ease",
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: "absolute",
+                          top: 3,
+                          left: isDemoMode ? 27 : 3,
+                          width: 24,
+                          height: 24,
+                          borderRadius: "50%",
+                          background: isDemoMode ? color : "rgba(255,255,255,0.82)",
+                          transition: "left 0.2s ease, background 0.2s ease",
+                        }}
+                      />
+                    </button>
+                  </label>
+                </PanelSection>
+              )}
 
               {event.question && (
                 <PanelSection label="Market question">

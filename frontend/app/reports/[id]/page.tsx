@@ -2,8 +2,9 @@
 
 import { ReactNode, use, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
 import { useRouter } from "next/navigation";
-import { getPaperTrading, getReport } from "@/lib/api";
+import { getPaperTrading, getReport, getSimulation } from "@/lib/api";
 import { GodseyeLogo } from "@/components/GodseyeLogo";
 import { PaperTradeDrawer } from "@/components/PaperTradeDrawer";
 import { MOCK_PAPER_TRADING, MOCK_REPORT, MOCK_MARKET } from "@/lib/mockData";
@@ -33,6 +34,33 @@ export default function ReportPage({
     queryKey: ["report", id],
     queryFn: () => getReport(id),
     enabled: !isMock,
+    retry: false,
+    refetchInterval: (query) => {
+      if (isMock) return false;
+      if (query.state.data) return false;
+      const err = query.state.error;
+      if (axios.isAxiosError(err) && err.response?.status === 404) {
+        return 2000;
+      }
+      return false;
+    },
+  });
+  const { data: simulation } = useQuery({
+    queryKey: ["simulation-for-report", id],
+    queryFn: () => getSimulation(id),
+    enabled: !isMock && !data,
+    retry: false,
+    refetchInterval: (query) => {
+      if (query.state.data?.status === "complete" && !data) return 2000;
+      if (
+        query.state.data?.status === "running" ||
+        query.state.data?.status === "building" ||
+        query.state.data?.status === "pending"
+      ) {
+        return 2000;
+      }
+      return false;
+    },
   });
 
   const report = isMock ? MOCK_REPORT : data;
@@ -61,6 +89,44 @@ export default function ReportPage({
             style={{ animation: "spin 0.8s linear infinite" }}
           />
           <span className="eyebrow text-[var(--text-muted)]">Loading report</span>
+        </div>
+      </div>
+    );
+  }
+
+  const waitingForReport =
+    !isMock &&
+    !report &&
+    (
+      isLoading ||
+      simulation?.status === "running" ||
+      simulation?.status === "building" ||
+      simulation?.status === "pending" ||
+      simulation?.status === "complete"
+    );
+
+  if (waitingForReport) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-base)] px-6">
+        <div className="surface-card w-full max-w-lg p-8 text-center">
+          <div className="eyebrow mb-4 text-[var(--accent)]">Preparing report</div>
+          <h1 className="mb-3 text-3xl font-semibold tracking-tight text-[var(--text-bright)]">
+            The briefing is still being assembled.
+          </h1>
+          <p className="mx-auto max-w-md text-base leading-7 text-[var(--text-secondary)]">
+            We are waiting for the report record to appear for this simulation. This page will retry automatically every 2 seconds.
+          </p>
+          {simulation?.status && (
+            <div className="ui-mono mt-6 text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">
+              Simulation status: {simulation.status}
+            </div>
+          )}
+          <button
+            onClick={() => router.push(simulationHref)}
+            className="ui-mono mt-6 rounded-full border border-white/15 px-5 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+          >
+            Back to simulation
+          </button>
         </div>
       </div>
     );

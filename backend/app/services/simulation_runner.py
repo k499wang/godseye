@@ -35,6 +35,8 @@ TOTAL_TICKS: int = 30
 VISIBLE_CLAIMS_PER_STANCE: int = 4
 CLAIM_RANKING_WEIGHT_STRENGTH: float = 0.7
 CLAIM_RANKING_WEIGHT_NOVELTY: float = 0.3
+OWN_CLAIM_MIN_SHARE_SCORE: float = 0.45
+OWN_CLAIM_OVERRIDE_MARGIN: float = 0.05
 TRUST_SHARE_DELTA: float = 0.02
 TRUST_IGNORE_DELTA: float = -0.01
 FACTION_THRESHOLD: float = 0.08
@@ -178,6 +180,7 @@ class SimulationRunner:
             claims = _generate_stub_claims()
 
         claims_by_id: dict[str, Claim] = {c.id: c for c in claims}
+        claim_origins: dict[str, str | None] = {c.id: None for c in claims}
         all_claim_shares: list[_PendingShare] = []
         tick_data: list[TickSnapshot] = []
 
@@ -193,8 +196,15 @@ class SimulationRunner:
 
             # 2. Prompt + LLM call for all 12 agents in parallel
             async def _process(agent: AgentRecord) -> tuple[AgentRecord, dict[str, Any]]:
+                self_originated_claims = self._get_agent_originated_claims(
+                    agent=agent,
+                    visible_claims=visible_claims,
+                    claims_by_id=claims_by_id,
+                    claim_origins=claim_origins,
+                )
                 sys_prompt, usr_prompt = self._build_agent_prompt(
                     agent, agents, visible_claims,
+                    self_originated_claims,
                     incoming_by_agent.get(agent.id, []),
                     market_question, tick_num,
                 )
@@ -232,12 +242,14 @@ class SimulationRunner:
                         visible_claims=visible_claims,
                         incoming_claims=incoming_by_agent.get(agent.id, []),
                         claims_by_id=claims_by_id,
+                        claim_origins=claim_origins,
                     )
                     if shared_claim is None:
                         state = self._apply_belief_update(agent, action)
                         tick_agent_states.append(state)
                         continue
                     claims_by_id[shared_claim.id] = shared_claim
+                    claim_origins.setdefault(shared_claim.id, agent.id)
                     new_shares = self._create_claim_shares(
                         agent, action, agents, shared_claim,
                         tick_num, simulation_id,
@@ -333,6 +345,7 @@ class SimulationRunner:
         agent: AgentRecord,
         all_agents: list[AgentRecord],
         visible_claims: list[Claim],
+        self_originated_claims: list[Claim],
         incoming_claims: list[_PendingShare],
         market_question: str,
         current_tick: int,
@@ -358,10 +371,10 @@ class SimulationRunner:
             f"2. share_claim — Either forward one existing claim OR create a new claim and send it to 1-4 trusted peers.\n\n"
             f"IMPORTANT: Good forecasters actively share evidence. You should share claims "
             f"roughly 40-60% of the time — especially when you see a strong or novel claim "
-            f"that your peers might not have seen, or when someone shares something with you "
-            f"that deserves to be passed along. Hoarding information is bad forecasting. "
-            f"If you received claims this round, seriously consider forwarding the most "
-            f"impactful one to a trusted peer.\n"
+            f"that your peers might not have seen. Hoarding information is bad forecasting. "
+            f"When you decide to share, default to originating your own claim or reusing one "
+            f"you personally created earlier. Only forward someone else's claim when it is "
+            f"clearly more important than anything you would say yourself.\n"
             f"When sharing, send to MULTIPLE peers (2-4 agents) — the more people who see "
             f"important evidence, the better the group forecast becomes. Don't just send to one person.\n\n"
             f"Return ONLY valid JSON matching one of these shapes:\n"
@@ -400,6 +413,12 @@ class SimulationRunner:
             parts.append(f"  {i}. [id: {claim.id}] {claim.text} (stance: {claim.stance})")
         parts.append("")
 
+        if self_originated_claims:
+            parts.append("Claims you originated:")
+            for claim in self_originated_claims:
+                parts.append(f"  - [id: {claim.id}] {claim.text} (stance: {claim.stance})")
+            parts.append("")
+
         # Incoming claims
         if incoming_claims:
             parts.append("Claims shared with you this round:")
@@ -418,6 +437,8 @@ class SimulationRunner:
             "Choose one action. If you share a claim, either use a claim_id from the "
             "visible or incoming claims above OR create a fresh claim_text of your own. "
             "If you create a new claim, set claim_stance to yes or no. "
+            "Very strong preference: create your own claim when sharing, or reuse one you already originated. "
+            "Only forward someone else's claim if it is substantially stronger than your own available view. "
             "target_agent_ids must be from the trusted agents list — include 2-4 agents to spread evidence widely. "
             "Explain yourself briefly and with personality. "
             "Remember: sharing strong evidence with multiple peers is just as valuable as updating your own belief. "
@@ -537,6 +558,70 @@ class SimulationRunner:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _score_claim_for_sharing(claim: Claim, agent: AgentRecord) -> float:
+        score = (
+            CLAIM_RANKING_WEIGHT_STRENGTH * claim.strength_score
+            + CLAIM_RANKING_WEIGHT_NOVELTY * claim.novelty_score
+        )
+        belief_alignment = agent.current_belief if claim.stance == "yes" else (1.0 - agent.current_belief)
+        return round(min(1.0, score + belief_alignment * 0.1), 4)
+
+    def _get_agent_originated_claims(
+        self,
+        *,
+        agent: AgentRecord,
+        visible_claims: list[Claim],
+        claims_by_id: dict[str, Claim],
+        claim_origins: dict[str, str | None],
+    ) -> list[Claim]:
+        visible_ids = {claim.id for claim in visible_claims}
+        own_claims = [
+            claim
+            for claim_id, claim in claims_by_id.items()
+            if claim_origins.get(claim_id) == agent.id and claim_id in visible_ids
+        ]
+        return sorted(
+            own_claims,
+            key=lambda claim: self._score_claim_for_sharing(claim, agent),
+            reverse=True,
+        )
+
+    def _select_preferred_claim(
+        self,
+        *,
+        agent: AgentRecord,
+        selected_claim: Claim | None,
+        visible_claims: list[Claim],
+        claims_by_id: dict[str, Claim],
+        claim_origins: dict[str, str | None],
+    ) -> Claim | None:
+        own_candidates = self._get_agent_originated_claims(
+            agent=agent,
+            visible_claims=visible_claims,
+            claims_by_id=claims_by_id,
+            claim_origins=claim_origins,
+        )
+        best_own_claim = own_candidates[0] if own_candidates else None
+        if best_own_claim is None:
+            return selected_claim
+
+        own_score = self._score_claim_for_sharing(best_own_claim, agent)
+        if own_score < OWN_CLAIM_MIN_SHARE_SCORE:
+            return selected_claim
+
+        if selected_claim is None:
+            return best_own_claim
+
+        if claim_origins.get(selected_claim.id) == agent.id:
+            return selected_claim
+
+        selected_score = self._score_claim_for_sharing(selected_claim, agent)
+        if selected_score > own_score + OWN_CLAIM_OVERRIDE_MARGIN:
+            return selected_claim
+
+        return best_own_claim
+
+    @staticmethod
     def _estimate_generated_claim_strength(agent: AgentRecord) -> float:
         extremity = min(1.0, abs(agent.current_belief - 0.5) * 2)
         return round(max(0.35, min(0.95, 0.35 + agent.confidence * 0.4 + extremity * 0.2)), 3)
@@ -562,14 +647,29 @@ class SimulationRunner:
         visible_claims: list[Claim],
         incoming_claims: list[_PendingShare],
         claims_by_id: dict[str, Claim],
+        claim_origins: dict[str, str | None],
     ) -> Claim | None:
         claim_id = str(action.get("claim_id", "")).strip()
+        selected_claim: Claim | None = None
         if claim_id:
-            return claims_by_id.get(claim_id)
+            selected_claim = claims_by_id.get(claim_id)
+            return self._select_preferred_claim(
+                agent=agent,
+                selected_claim=selected_claim,
+                visible_claims=visible_claims,
+                claims_by_id=claims_by_id,
+                claim_origins=claim_origins,
+            )
 
         claim_text = " ".join(str(action.get("claim_text", "")).split()).strip()
         if not claim_text:
-            return None
+            return self._select_preferred_claim(
+                agent=agent,
+                selected_claim=None,
+                visible_claims=visible_claims,
+                claims_by_id=claims_by_id,
+                claim_origins=claim_origins,
+            )
 
         claim_stance = str(action.get("claim_stance", "")).strip().lower()
         if claim_stance not in ("yes", "no"):
