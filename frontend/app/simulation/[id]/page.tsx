@@ -179,9 +179,10 @@ export default function SimulationPage({
           </button>
           <button
             onClick={() => router.push("/?mode=explore")}
-            className="border border-white/12 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            className="border-none bg-transparent p-0 cursor-pointer"
+            aria-label="Go to explore mode"
           >
-            <GodseyeLogo size="sm" />
+            <img src="/logo.png" alt="GodsEye" width={28} height={28} />
           </button>
           <div>
             <div className="eyebrow mb-1 text-[var(--accent)]">Simulation replay</div>

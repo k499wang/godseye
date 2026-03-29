@@ -285,10 +285,7 @@ export function GlobeHomePage({
                 }}
                 aria-label="Go to explore mode"
               >
-                <GodseyeLogo
-                  subtitle={inIntro ? "Prediction market intelligence" : undefined}
-                  size="sm"
-                />
+                <img src="/logo.png" alt="GodsEye" width={28} height={28} />
               </button>
             </>
           </div>

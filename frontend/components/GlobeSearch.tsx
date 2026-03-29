@@ -5,19 +5,24 @@ import { CATEGORY_COLOR, type GlobeEvent } from "@/lib/globeData";
 import { useGlobe } from "@/components/GlobeContext";
 
 const SUGGESTIONS = [
-  "Fed",
-  "inflation",
-  "oil",
-  "election",
-  "Taiwan",
-  "rates",
-  "Bitcoin",
-  "Gaza",
-  "tariffs",
-  "China",
-  "Ukraine",
-  "OPEC",
+  "Fed rate decision",
+  "US inflation",
+  "oil price",
+  "US election",
+  "Taiwan strait",
+  "Bitcoin ETF",
+  "Gaza ceasefire",
+  "China tariffs",
+  "Ukraine war",
+  "OPEC output",
+  "Trump impeachment",
+  "AI regulation",
 ];
+
+const TYPING_SPEED_MS = 65;
+const DELETING_SPEED_MS = 32;
+const HOLD_MS = 1700;
+const PAUSE_BETWEEN_MS = 320;
 
 function searchEvents(query: string, events: GlobeEvent[]): GlobeEvent[] {
   const value = query.trim().toLowerCase();
@@ -32,6 +37,34 @@ function searchEvents(query: string, events: GlobeEvent[]): GlobeEvent[] {
   ).slice(0, 5);
 }
 
+function findFuzzyMatch(query: string, events: GlobeEvent[]): GlobeEvent | null {
+  const q = query.trim().toLowerCase();
+  if (q.length < 2 || events.length === 0) return null;
+
+  const qWords = q.split(/\W+/).filter((w) => w.length >= 3);
+
+  let best: GlobeEvent | null = null;
+  let bestScore = 0;
+
+  for (const event of events) {
+    const text = `${event.title} ${event.question} ${event.region}`.toLowerCase();
+    let score = 0;
+
+    for (const w of qWords) {
+      if (text.includes(w)) score += w.length;
+    }
+
+    if (event.title.toLowerCase().includes(q)) score += q.length * 3;
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = event;
+    }
+  }
+
+  return bestScore >= Math.max(3, q.length * 0.4) ? best : null;
+}
+
 export function GlobeSearch({
   onSelect,
 }: {
@@ -40,18 +73,59 @@ export function GlobeSearch({
   const { events } = useGlobe();
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
-  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [animatedPlaceholder, setAnimatedPlaceholder] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const interval = setInterval(
-      () => setPlaceholderIndex((index) => (index + 1) % SUGGESTIONS.length),
-      2800
-    );
-    return () => clearInterval(interval);
-  }, []);
+    let cancelled = false;
+    let timerId: ReturnType<typeof setTimeout>;
+    let charIndex = 0;
+    let deleting = false;
+    let wordIndex = 0;
+
+    const run = () => {
+      if (cancelled) return;
+      if (query) {
+        setAnimatedPlaceholder("");
+        return;
+      }
+
+      const word = SUGGESTIONS[wordIndex];
+
+      if (!deleting) {
+        if (charIndex < word.length) {
+          charIndex++;
+          setAnimatedPlaceholder(`"${word.slice(0, charIndex)}"`);
+          timerId = setTimeout(run, TYPING_SPEED_MS);
+        } else {
+          timerId = setTimeout(() => {
+            if (cancelled) return;
+            deleting = true;
+            run();
+          }, HOLD_MS);
+        }
+      } else {
+        if (charIndex > 0) {
+          charIndex--;
+          setAnimatedPlaceholder(`"${word.slice(0, charIndex)}"`);
+          timerId = setTimeout(run, DELETING_SPEED_MS);
+        } else {
+          deleting = false;
+          wordIndex = (wordIndex + 1) % SUGGESTIONS.length;
+          timerId = setTimeout(run, PAUSE_BETWEEN_MS);
+        }
+      }
+    };
+
+    timerId = setTimeout(run, 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(timerId);
+    };
+  }, [query]);
 
   const results = searchEvents(query, events);
+  const fuzzyMatch = results.length === 0 && query.length > 1 ? findFuzzyMatch(query, events) : null;
   const showDropdown = focused && (results.length > 0 || query.length > 0);
 
   const handleSelect = useCallback(
@@ -111,7 +185,7 @@ export function GlobeSearch({
               handleSelect(results[0]);
             }
           }}
-          placeholder={`Search "${SUGGESTIONS[placeholderIndex]}"`}
+          placeholder={animatedPlaceholder ? `Search ${animatedPlaceholder}` : "Search markets..."}
           style={{
             background: "transparent",
             border: "none",
@@ -161,17 +235,55 @@ export function GlobeSearch({
           }}
         >
           {results.length === 0 ? (
-            <div
-              className="ui-mono"
-              style={{
-                padding: "14px 16px",
-                fontSize: 12,
-                color: "var(--text-muted)",
-                letterSpacing: "0.16em",
-                textTransform: "uppercase",
-              }}
-            >
-              No markets found
+            <div style={{ padding: "14px 16px" }}>
+              <div
+                className="ui-mono"
+                style={{
+                  fontSize: 12,
+                  color: "var(--text-muted)",
+                  letterSpacing: "0.16em",
+                  textTransform: "uppercase",
+                }}
+              >
+                No markets found
+              </div>
+              {fuzzyMatch && (
+                <button
+                  onMouseDown={() => handleSelect(fuzzyMatch)}
+                  style={{
+                    marginTop: 8,
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    cursor: "pointer",
+                    textAlign: "left",
+                    display: "flex",
+                    alignItems: "baseline",
+                    gap: 6,
+                  }}
+                >
+                  <span
+                    className="ui-mono"
+                    style={{
+                      fontSize: 11,
+                      color: "var(--text-subtle)",
+                      letterSpacing: "0.14em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Did you mean:
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 13,
+                      color: "var(--accent)",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {fuzzyMatch.title}
+                  </span>
+                </button>
+              )}
             </div>
           ) : (
             results.map((event, index) => (
