@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from typing import Any
@@ -9,6 +10,7 @@ from app.core.llm_client import MODEL_GEMINI_FLASH, llm_client
 _SAFE_LAT_MIN = -60.0
 _SAFE_LAT_MAX = 60.0
 _GEMINI_BATCH_SIZE = 20
+_GEMINI_BATCH_TIMEOUT_SECONDS = 8.0
 
 _LEAGUE_TAGS: dict[str, tuple[str, ...]] = {
     "nba": ("nba", "basketball", "pro-basketball"),
@@ -325,9 +327,7 @@ async def _gemini_enrich(markets: list[dict[str, Any]]) -> dict[str, dict[str, A
     if not markets:
         return {}
 
-    geo_map: dict[str, dict[str, Any]] = {}
-    for start in range(0, len(markets), _GEMINI_BATCH_SIZE):
-        batch = markets[start:start + _GEMINI_BATCH_SIZE]
+    async def enrich_batch(batch: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         items = [
             {
                 "slug": str(m.get("slug") or ""),
@@ -347,19 +347,25 @@ async def _gemini_enrich(markets: list[dict[str, Any]]) -> dict[str, dict[str, A
             f"Markets:\n{json.dumps(items, ensure_ascii=True)}\n\n"
             "Return JSON with a 'markets' array. Each item must have slug, lat, lng, region."
         )
+
         try:
-            response = await llm_client.complete(
-                prompt=prompt,
-                model=MODEL_GEMINI_FLASH,
-                response_format="json",
+            response = await asyncio.wait_for(
+                llm_client.complete(
+                    prompt=prompt,
+                    model=MODEL_GEMINI_FLASH,
+                    response_format="json",
+                ),
+                timeout=_GEMINI_BATCH_TIMEOUT_SECONDS,
             )
             parsed = json.loads(response)
         except Exception:
-            continue
+            return {}
 
         raw_items = parsed.get("markets", [])
         if not isinstance(raw_items, list):
-            continue
+            return {}
+
+        batch_geo_map: dict[str, dict[str, Any]] = {}
         for item in raw_items:
             if not isinstance(item, dict):
                 continue
@@ -370,8 +376,17 @@ async def _gemini_enrich(markets: list[dict[str, Any]]) -> dict[str, dict[str, A
             region = str(item.get("region") or "").strip() or (
                 _coords_to_region(lat, lng) if (lat or lng) else "Global"
             )
-            geo_map[slug] = {"lat": lat, "lng": lng, "region": region}
+            batch_geo_map[slug] = {"lat": lat, "lng": lng, "region": region}
 
+        return batch_geo_map
+
+    geo_map: dict[str, dict[str, Any]] = {}
+    tasks = [
+        enrich_batch(markets[start:start + _GEMINI_BATCH_SIZE])
+        for start in range(0, len(markets), _GEMINI_BATCH_SIZE)
+    ]
+    for batch_map in await asyncio.gather(*tasks):
+        geo_map.update(batch_map)
     return geo_map
 
 
