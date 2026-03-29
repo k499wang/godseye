@@ -129,7 +129,6 @@ export default function ReportPage({
         action={
           <button
             onClick={() => router.push(simulationHref)}
-<<<<<<< HEAD
             className="ui-mono mt-6 border border-white/15 px-5 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
           >
             Back to simulation
