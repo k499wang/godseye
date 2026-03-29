@@ -38,7 +38,7 @@ type GraphLink = d3.SimulationLinkDatum<GraphNode> & {
 };
 
 const SCENE_W = 1420;
-const SCENE_H = 940;
+const SCENE_H = 860;
 const TICK_MOTION_MS = 650;
 
 function shortName(name: string): string {
@@ -100,7 +100,6 @@ function curveMetrics(link: GraphLink): {
 function labelPosition(link: GraphLink): { x: number; y: number } | null {
   const metrics = curveMetrics(link);
   if (!metrics) return null;
-
   return {
     x: 0.25 * (metrics.source.x ?? 0) + 0.5 * metrics.cx + 0.25 * (metrics.target.x ?? 0),
     y: 0.25 * (metrics.source.y ?? 0) + 0.5 * metrics.cy + 0.25 * (metrics.target.y ?? 0),
@@ -117,6 +116,10 @@ function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export function AgentConstellation({
   agents,
   tickData,
@@ -131,12 +134,10 @@ export function AgentConstellation({
   useEffect(() => {
     const element = containerRef.current;
     if (!element) return;
-
     const observer = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width;
       if (width) setContainerWidth(width);
     });
-
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
@@ -156,7 +157,6 @@ export function AgentConstellation({
     const previousStates = new Map(
       (previousSnapshot?.agent_states ?? []).map((state) => [state.agent_id, state])
     );
-
     return new Map(
       agents.map((agent) => {
         const currentState = currentStates.get(agent.id);
@@ -170,6 +170,8 @@ export function AgentConstellation({
             confidence: currentState?.confidence ?? agent.confidence,
             delta: belief - previousBelief,
             isSharing: currentState?.action_taken === "share_claim",
+            reasoning: currentState?.reasoning ?? "",
+            action: currentState?.action_taken ?? "update_belief",
           },
         ];
       })
@@ -178,6 +180,7 @@ export function AgentConstellation({
 
   const activeShares = currentSnapshot?.claim_shares ?? [];
 
+  // ---- Layout computation (d3 force simulation) ----
   const layout = useMemo(() => {
     const nodes: GraphNode[] = agents.map((agent) => {
       const state = stateById.get(agent.id);
@@ -207,6 +210,7 @@ export function AgentConstellation({
       };
     });
 
+    // Build trust links from trust_updates across snapshots
     const trustMap = new Map<string, GraphLink>();
     for (const snapshot of snapshots) {
       for (const update of snapshot.trust_updates) {
@@ -225,6 +229,7 @@ export function AgentConstellation({
       }
     }
 
+    // Build share links from current tick
     const shareLinks: GraphLink[] = activeShares.map((share, index) => {
       const sourceAgent = agents.find((agent) => agent.id === share.from_agent_id);
       const targetAgent = agents.find((agent) => agent.id === share.to_agent_id);
@@ -244,22 +249,18 @@ export function AgentConstellation({
 
     const links: GraphLink[] = [...trustMap.values(), ...shareLinks];
 
+    // Add subtle ambient links when graph is sparse (early ticks)
     if (links.length < Math.max(agents.length, 8)) {
       const ambientLinks = new Map<string, GraphLink>();
       for (const source of nodes) {
         const neighbors = nodes
           .filter((target) => target.id !== source.id)
-          .map((target) => {
-            const beliefGap = Math.abs(source.belief - target.belief);
-            const confidenceGap = Math.abs(source.confidence - target.confidence);
-            return {
-              target,
-              score: beliefGap * 0.7 + confidenceGap * 0.3,
-            };
-          })
+          .map((target) => ({
+            target,
+            score: Math.abs(source.belief - target.belief) * 0.7 + Math.abs(source.confidence - target.confidence) * 0.3,
+          }))
           .sort((a, b) => a.score - b.score)
           .slice(0, 2);
-
         for (const neighbor of neighbors) {
           const pair = [source.id, neighbor.target.id].sort().join(":");
           if (ambientLinks.has(pair)) continue;
@@ -271,7 +272,7 @@ export function AgentConstellation({
             strength: Math.max(0.35, 1 - neighbor.score),
             label: "",
             isHighlighted: selectedAgentId === source.id || selectedAgentId === neighbor.target.id,
-            color: "rgba(148,163,184,0.92)",
+            color: "rgba(148,163,184,0.5)",
           });
         }
       }
@@ -290,7 +291,7 @@ export function AgentConstellation({
       )
       .force("charge", d3.forceManyBody().strength(-420))
       .force("center", d3.forceCenter(SCENE_W / 2, SCENE_H / 2))
-      .force("collision", d3.forceCollide<GraphNode>().radius((node) => node.radius + 62))
+      .force("collision", d3.forceCollide<GraphNode>().radius((node) => node.radius + 44))
       .force("x", d3.forceX<GraphNode>((node) => node.targetX).strength(0.14))
       .force("y", d3.forceY<GraphNode>((node) => node.targetY).strength(0.14))
       .force("radial", d3.forceRadial(260, SCENE_W / 2, SCENE_H / 2).strength(0.02))
@@ -301,22 +302,16 @@ export function AgentConstellation({
     return { nodes, links };
   }, [activeShares, agents, selectedAgentId, snapshots, stateById]);
 
+  // ---- Animation ----
   const [animatedNodes, setAnimatedNodes] = useState<GraphNode[]>(layout.nodes);
 
   useEffect(() => {
     setAnimatedNodes((previousNodes) => {
       if (previousNodes.length === 0) return layout.nodes;
-
       const previousById = new Map(previousNodes.map((node) => [node.id, node]));
       return layout.nodes.map((node) => {
         const previous = previousById.get(node.id);
-        return previous
-          ? {
-              ...node,
-              x: previous.x ?? node.x,
-              y: previous.y ?? node.y,
-            }
-          : node;
+        return previous ? { ...node, x: previous.x ?? node.x, y: previous.y ?? node.y } : node;
       });
     });
   }, [layout.nodes]);
@@ -337,11 +332,9 @@ export function AgentConstellation({
     });
 
     const start = performance.now();
-
     const animate = (now: number) => {
       const progress = Math.min(1, (now - start) / TICK_MOTION_MS);
       const eased = easeInOutCubic(progress);
-
       setAnimatedNodes(
         layout.nodes.map((node) => {
           const target = targets.find((entry) => entry.id === node.id);
@@ -353,14 +346,12 @@ export function AgentConstellation({
           };
         })
       );
-
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(animate);
       } else {
         animationFrameRef.current = null;
       }
     };
-
     animationFrameRef.current = requestAnimationFrame(animate);
 
     return () => {
@@ -371,13 +362,12 @@ export function AgentConstellation({
     };
   }, [layout.nodes]);
 
+  // ---- Rendered links (use animated node positions) ----
   const renderedLinks = useMemo(
     () =>
       layout.links.map((link) => {
-        const sourceId =
-          typeof link.source === "object" ? link.source.id : String(link.source);
-        const targetId =
-          typeof link.target === "object" ? link.target.id : String(link.target);
+        const sourceId = typeof link.source === "object" ? link.source.id : String(link.source);
+        const targetId = typeof link.target === "object" ? link.target.id : String(link.target);
         return {
           ...link,
           source: animatedNodes.find((node) => node.id === sourceId) ?? link.source,
@@ -387,9 +377,9 @@ export function AgentConstellation({
     [animatedNodes, layout.links]
   );
 
-  const selectedNode =
-    animatedNodes.find((node) => node.id === selectedAgentId) ?? animatedNodes[0] ?? null;
-  const renderedHeight = Math.max(680, containerWidth * (SCENE_H / SCENE_W));
+  const selectedNode = animatedNodes.find((node) => node.id === selectedAgentId) ?? animatedNodes[0] ?? null;
+  const selectedState = selectedNode ? stateById.get(selectedNode.id) : null;
+  const renderedHeight = Math.max(640, containerWidth * (SCENE_H / SCENE_W));
 
   if (!agents.length) {
     return (
@@ -401,201 +391,143 @@ export function AgentConstellation({
     );
   }
 
+  // ---- Render ----
   return (
     <div className="rounded-[30px] border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)] p-4 shadow-[0_24px_70px_rgba(0,0,0,0.28)]">
       <div
         ref={containerRef}
-        className="relative overflow-hidden rounded-[26px] border border-[rgba(255,255,255,0.08)] bg-[radial-gradient(circle_at_18%_12%,rgba(245,158,11,0.16),transparent_30%),radial-gradient(circle_at_82%_18%,rgba(59,130,246,0.12),transparent_34%),linear-gradient(180deg,rgba(13,17,26,0.98)_0%,rgba(6,9,16,0.98)_100%)]"
+        className="relative overflow-hidden rounded-[26px] border border-[rgba(255,255,255,0.06)] bg-[radial-gradient(ellipse_at_20%_15%,rgba(245,158,11,0.08),transparent_40%),radial-gradient(ellipse_at_80%_20%,rgba(59,130,246,0.06),transparent_40%),linear-gradient(180deg,rgba(8,11,18,0.99)_0%,rgba(5,7,13,0.99)_100%)]"
       >
         <svg width="100%" height={renderedHeight} viewBox={`0 0 ${SCENE_W} ${SCENE_H}`} className="block">
           <defs>
             <radialGradient id="star-glow" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#fef3c7" />
-              <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
+              <stop offset="0%" stopColor="#e2e8f0" />
+              <stop offset="100%" stopColor="#94a3b8" stopOpacity="0" />
             </radialGradient>
             <filter id="soft-glow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="8" result="coloredBlur" />
+              <feGaussianBlur stdDeviation="6" result="coloredBlur" />
               <feMerge>
                 <feMergeNode in="coloredBlur" />
                 <feMergeNode in="SourceGraphic" />
               </feMerge>
             </filter>
-            <filter id="network-glow" x="-80%" y="-80%" width="260%" height="260%">
-              <feGaussianBlur stdDeviation="14" result="networkBlur" />
-              <feColorMatrix
-                in="networkBlur"
-                type="matrix"
-                values="1 0 0 0 0
-                        0 1 0 0 0
-                        0 0 1 0 0
-                        0 0 0 0.55 0"
-              />
-              <feMerge>
-                <feMergeNode />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-            {renderedLinks.map((link) => (
-              <linearGradient
-                key={`line-${link.id}`}
-                id={`line-${link.id}`}
-                x1="0%"
-                y1="0%"
-                x2="100%"
-                y2="0%"
-              >
-                <stop offset="0%" stopColor={link.color} stopOpacity={link.kind === "share" ? 1 : 0.16} />
-                <stop offset="50%" stopColor={link.kind === "share" ? "#fde68a" : link.color} stopOpacity={link.kind === "share" ? 0.78 : 0.3} />
-                <stop offset="100%" stopColor={link.secondaryColor ?? link.color} stopOpacity={link.kind === "share" ? 1 : 0.16} />
-              </linearGradient>
-            ))}
+            {/* Share link gradients */}
             {renderedLinks
               .filter((link) => link.kind === "share")
               .map((link) => (
-                <linearGradient
-                  key={`gradient-${link.id}`}
-                  id={`gradient-${link.id}`}
-                  x1="0%"
-                  y1="0%"
-                  x2="100%"
-                  y2="0%"
-                >
+                <linearGradient key={`gradient-${link.id}`} id={`gradient-${link.id}`} x1="0%" y1="0%" x2="100%" y2="0%">
                   <stop offset="0%" stopColor={link.color} />
+                  <stop offset="50%" stopColor="#fde68a" stopOpacity="0.7" />
                   <stop offset="100%" stopColor={link.secondaryColor ?? link.color} />
                 </linearGradient>
               ))}
+            {/* Share link arrow markers */}
             {renderedLinks
               .filter((link) => link.kind === "share")
               .map((link) => (
-                <marker
-                  key={`marker-${link.id}`}
-                  id={`marker-${link.id}`}
-                  markerWidth="8"
-                  markerHeight="8"
-                  refX="7"
-                  refY="4"
-                  orient="auto"
-                >
-                  <path d="M0,0 L8,4 L0,8 z" fill={link.secondaryColor ?? link.color} />
+                <marker key={`marker-${link.id}`} id={`marker-${link.id}`} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                  <path d="M0,0 L8,4 L0,8 z" fill={link.secondaryColor ?? link.color} opacity="0.8" />
                 </marker>
               ))}
           </defs>
 
-          {Array.from({ length: 180 }).map((_, index) => {
-            const x = seededUnit(`star-x-${index}`) * SCENE_W;
-            const y = seededUnit(`star-y-${index}`) * SCENE_H;
-            const r = 0.6 + seededUnit(`star-r-${index}`) * 1.8;
-            return (
-              <circle
-                key={`star-${index}`}
-                cx={x}
-                cy={y}
-                r={r}
-                fill="url(#star-glow)"
-                opacity={0.35 + seededUnit(`star-o-${index}`) * 0.5}
-              />
-            );
-          })}
+          {/* Background stars */}
+          {Array.from({ length: 55 }).map((_, index) => (
+            <circle
+              key={`star-${index}`}
+              cx={seededUnit(`star-x-${index}`) * SCENE_W}
+              cy={seededUnit(`star-y-${index}`) * SCENE_H}
+              r={0.5 + seededUnit(`star-r-${index}`) * 1.2}
+              fill="url(#star-glow)"
+              opacity={0.2 + seededUnit(`star-o-${index}`) * 0.35}
+            />
+          ))}
 
+          {/* Links */}
           <g>
             {renderedLinks.map((link) => {
               const metrics = curveMetrics(link);
               if (!metrics) return null;
               const labelPos = labelPosition(link);
 
+              if (link.kind === "ambient") {
+                return (
+                  <path
+                    key={link.id}
+                    d={metrics.path}
+                    fill="none"
+                    stroke="rgba(148,163,184,0.15)"
+                    strokeWidth={link.isHighlighted ? 1.4 : 0.8}
+                    strokeOpacity={link.isHighlighted ? 0.4 : 0.2}
+                    strokeDasharray="4 6"
+                    strokeLinecap="round"
+                  />
+                );
+              }
+
+              if (link.kind === "trust") {
+                return (
+                  <g key={link.id}>
+                    <path
+                      d={metrics.path}
+                      fill="none"
+                      stroke={link.isHighlighted ? link.color : "rgba(148,163,184,0.5)"}
+                      strokeWidth={link.isHighlighted ? 2.4 : 1.2 + link.strength * 1.2}
+                      strokeOpacity={link.isHighlighted ? 0.7 : 0.25}
+                      strokeLinecap="round"
+                    />
+                    {link.isHighlighted && (
+                      <circle r="2" fill={link.color} opacity="0.7">
+                        <animateMotion dur="2.8s" repeatCount="indefinite" path={metrics.path} />
+                      </circle>
+                    )}
+                  </g>
+                );
+              }
+
+              // Share links — the prominent ones
               return (
                 <g key={link.id}>
+                  {/* Glow behind share path */}
                   <path
                     d={metrics.path}
                     fill="none"
-                    stroke={
-                      link.kind === "share"
-                        ? "rgba(245,158,11,0.24)"
-                        : link.kind === "ambient"
-                          ? "rgba(148,163,184,0.12)"
-                          : "rgba(148,163,184,0.18)"
-                    }
-                    strokeWidth={link.kind === "share" ? 14 : link.kind === "ambient" ? 5 : link.isHighlighted ? 9 : 7}
-                    strokeOpacity={link.kind === "share" ? 0.22 : link.kind === "ambient" ? 0.12 : link.isHighlighted ? 0.24 : 0.16}
-                    filter="url(#network-glow)"
+                    stroke="rgba(245,158,11,0.15)"
+                    strokeWidth={10}
+                    strokeOpacity={0.2}
+                    filter="url(#soft-glow)"
                   />
+                  {/* Main share path */}
                   <path
                     d={metrics.path}
                     fill="none"
-                    stroke={
-                      link.kind === "share"
-                        ? `url(#line-${link.id})`
-                        : link.kind === "ambient"
-                          ? "rgba(148,163,184,0.42)"
-                          : link.isHighlighted
-                            ? "#cbd5e1"
-                            : "rgba(148,163,184,0.88)"
-                    }
-                    strokeWidth={
-                      link.kind === "share"
-                        ? link.isHighlighted
-                          ? 4.5
-                          : 3.6
-                        : link.kind === "ambient"
-                          ? link.isHighlighted
-                            ? 2.8
-                            : 1.6
-                        : link.isHighlighted
-                          ? 3.4
-                          : 2.2 + link.strength * 2.2
-                    }
-                    strokeOpacity={
-                      link.kind === "share"
-                        ? link.isHighlighted
-                          ? 1
-                          : 0.92
-                        : link.kind === "ambient"
-                          ? link.isHighlighted
-                            ? 0.52
-                            : 0.3
-                        : link.isHighlighted
-                          ? 0.96
-                          : 0.72
-                    }
-                    markerEnd={link.kind === "share" ? `url(#marker-${link.id})` : undefined}
+                    stroke={`url(#gradient-${link.id})`}
+                    strokeWidth={link.isHighlighted ? 3.5 : 2.8}
+                    strokeOpacity={link.isHighlighted ? 1 : 0.85}
+                    markerEnd={`url(#marker-${link.id})`}
                     strokeLinecap="round"
-                    filter={link.kind === "share" ? "url(#soft-glow)" : "url(#soft-glow)"}
-                    className={link.kind === "share" ? "constellation-share-path" : undefined}
+                    className="constellation-share-path"
                   />
-                  {link.kind === "share" && (
-                    <>
-                      <circle r="3.5" fill={link.color} filter="url(#soft-glow)">
-                        <animateMotion dur="1.9s" repeatCount="indefinite" path={metrics.path} />
-                      </circle>
-                      <circle r="2.2" fill={link.secondaryColor ?? link.color} opacity="0.9">
-                        <animateMotion dur="1.9s" begin="0.55s" repeatCount="indefinite" path={metrics.path} />
-                      </circle>
-                    </>
-                  )}
-                  {link.kind === "trust" && link.isHighlighted && (
-                    <circle r="2.4" fill={link.color} opacity="0.75">
-                      <animateMotion dur="2.8s" repeatCount="indefinite" path={metrics.path} />
-                    </circle>
-                  )}
-                  {link.kind === "share" && labelPos && (
+                  {/* Animated particles */}
+                  <circle r="3" fill={link.color} filter="url(#soft-glow)">
+                    <animateMotion dur="1.9s" repeatCount="indefinite" path={metrics.path} />
+                  </circle>
+                  <circle r="2" fill={link.secondaryColor ?? link.color} opacity="0.85">
+                    <animateMotion dur="1.9s" begin="0.55s" repeatCount="indefinite" path={metrics.path} />
+                  </circle>
+                  {/* Claim text label */}
+                  {link.isHighlighted && labelPos && (
                     <g transform={`translate(${labelPos.x}, ${labelPos.y})`}>
                       <rect
-                        x={-(Math.max(90, link.label.length * 6.5) / 2)}
-                        y="-13"
-                        width={Math.max(90, link.label.length * 6.5)}
-                        height="26"
-                        rx="13"
-                        fill="rgba(8,11,18,0.92)"
-                        stroke={link.isHighlighted ? "rgba(245,158,11,0.32)" : "rgba(255,255,255,0.08)"}
+                        x={-(Math.max(80, link.label.length * 6) / 2)}
+                        y="-12"
+                        width={Math.max(80, link.label.length * 6)}
+                        height="24"
+                        rx="12"
+                        fill="rgba(8,11,18,0.94)"
+                        stroke="rgba(245,158,11,0.25)"
                       />
-                      <text
-                        textAnchor="middle"
-                        dominantBaseline="central"
-                        fontSize="11"
-                        fontFamily="var(--font-mono)"
-                        fill="#dbe5f2"
-                        letterSpacing="0.02em"
-                      >
+                      <text textAnchor="middle" dominantBaseline="central" fontSize="10" fontFamily="var(--font-mono)" fill="#dbe5f2" letterSpacing="0.02em">
                         {link.label}
                       </text>
                     </g>
@@ -605,11 +537,11 @@ export function AgentConstellation({
             })}
           </g>
 
+          {/* Nodes */}
           <g>
             {animatedNodes.map((node) => {
-              const nodeColor = ARCHETYPE_COLORS[node.archetype] ?? "#0f172a";
+              const nodeColor = ARCHETYPE_COLORS[node.archetype] ?? "#94a3b8";
               const label = shortName(node.name);
-              const labelWidth = Math.max(84, label.length * 8 + 44);
               const nodeX = node.x ?? SCENE_W / 2;
               const nodeY = node.y ?? SCENE_H / 2;
 
@@ -621,76 +553,123 @@ export function AgentConstellation({
                   style={{ cursor: "pointer" }}
                   className="constellation-node-group"
                 >
+                  {/* Selection ring */}
                   {node.isSelected && (
-                    <circle r={node.radius + 11} fill={nodeColor} opacity="0.12" />
+                    <circle r={node.radius + 9} fill="none" stroke={nodeColor} strokeWidth="1.5" strokeOpacity="0.5" strokeDasharray="4 3" />
                   )}
+                  {/* Active pulse */}
                   {node.isActive && (
-                    <circle r={node.radius + 18} fill="none" stroke={nodeColor} strokeOpacity="0.22" className="constellation-node-pulse" />
+                    <circle r={node.radius + 16} fill="none" stroke={nodeColor} strokeOpacity="0.2" className="constellation-node-pulse" />
                   )}
+                  {/* Soft glow */}
                   <circle
-                    r={node.radius + (node.isActive ? 5 : 2)}
+                    r={node.radius + (node.isActive ? 4 : 2)}
                     fill={nodeColor}
-                    opacity={node.isActive ? 0.16 : 0.08}
+                    opacity={node.isSelected ? 0.18 : node.isActive ? 0.12 : 0.06}
                   />
+                  {/* Main circle */}
                   <circle
                     r={node.radius}
-                    fill="rgba(7,9,17,0.96)"
+                    fill="rgba(7,9,17,0.94)"
                     stroke={nodeColor}
-                    strokeWidth={node.isSelected ? 3 : 2}
+                    strokeWidth={node.isSelected ? 2.5 : 1.5}
                   />
+                  {/* Inner dot */}
                   <circle
-                    r={Math.max(3.5, node.radius - 5)}
+                    r={Math.max(3, node.radius - 4)}
                     fill={nodeColor}
+                    opacity={0.9}
                     filter={node.isActive ? "url(#soft-glow)" : undefined}
                   />
 
-                  <g transform={`translate(${node.radius + 12}, -16)`}>
-                    <rect
-                      width={labelWidth}
-                      height="34"
-                      rx="17"
-                      fill="rgba(7,9,17,0.88)"
-                      stroke={node.isSelected ? "rgba(245,158,11,0.34)" : "rgba(255,255,255,0.08)"}
-                    />
-                    <circle cx="14" cy="17" r="4" fill={nodeColor} />
-                    <text x="24" y="14" fontSize="12" fontWeight="600" fill="#f8fafc">
-                      {label}
-                    </text>
-                    <text x={labelWidth - 10} y="14" textAnchor="end" fontSize="11" fill={beliefTone(node.belief)} fontFamily="var(--font-mono)">
-                      {Math.round(node.belief * 100)}%
-                    </text>
-                    <text x="24" y="25" fontSize="9.5" fill="#8b97ab" fontFamily="var(--font-mono)" letterSpacing="0.12em">
-                      {node.isActive ? "ACTIVE" : "STABLE"}
-                    </text>
-                  </g>
+                  {/* Name below node */}
+                  <text
+                    y={node.radius + 16}
+                    textAnchor="middle"
+                    fontSize="11.5"
+                    fontWeight="600"
+                    fill={node.isSelected ? "#f8fafc" : "#cbd5e1"}
+                    stroke="rgba(5,7,13,0.85)"
+                    strokeWidth="3"
+                    paintOrder="stroke"
+                  >
+                    {label}
+                  </text>
+                  {/* Belief below name */}
+                  <text
+                    y={node.radius + 30}
+                    textAnchor="middle"
+                    fontSize="10"
+                    fontWeight="700"
+                    fontFamily="var(--font-mono)"
+                    fill={beliefTone(node.belief)}
+                    stroke="rgba(5,7,13,0.85)"
+                    strokeWidth="3"
+                    paintOrder="stroke"
+                  >
+                    {Math.round(node.belief * 100)}%
+                    {node.delta !== 0 && (
+                      <tspan fill={node.delta > 0 ? "#34d399" : "#fb7185"} fontSize="9">
+                        {" "}{node.delta > 0 ? "\u25B2" : "\u25BC"}
+                      </tspan>
+                    )}
+                  </text>
                 </g>
               );
             })}
           </g>
         </svg>
 
-        <div className="pointer-events-none absolute left-5 top-5 flex flex-wrap items-center gap-2">
-          <LegendChip label="Trust" color="#94a3b8" />
-          <LegendChip label="Flow" color="#f59e0b" />
-          <LegendChip label="Focus" color="#f59e0b" strong />
+        {/* Legend — top left: link types */}
+        <div className="pointer-events-none absolute left-4 top-4 flex items-center gap-2">
+          <LinkLegendChip label="Trust" color="#94a3b8" />
+          <LinkLegendChip label="Claim share" color="#f59e0b" animated />
         </div>
+
+        {/* Legend — bottom left: archetypes */}
+        <div className="pointer-events-none absolute bottom-4 left-4 flex flex-wrap items-center gap-1.5">
+          {Object.entries(ARCHETYPE_LABELS).map(([key, label]) => (
+            <ArchetypeChip key={key} label={label} color={ARCHETYPE_COLORS[key]} />
+          ))}
+        </div>
+
+        {/* Selected agent info card — top right */}
         {selectedNode && (
-          <div className="pointer-events-none absolute right-5 top-5 min-w-[280px] rounded-[20px] border border-[rgba(255,255,255,0.08)] bg-[rgba(7,9,17,0.84)] px-4 py-3 backdrop-blur">
-            <div className="mb-2 flex items-center gap-2">
+          <div className="pointer-events-none absolute right-4 top-4 w-[280px] rounded-[18px] border border-[rgba(255,255,255,0.08)] bg-[rgba(7,9,17,0.88)] px-4 py-3 backdrop-blur-sm">
+            <div className="mb-2 flex items-center gap-2.5">
               <span
                 className="h-2.5 w-2.5 rounded-full"
-                style={{ background: ARCHETYPE_COLORS[selectedNode.archetype] ?? "#0f172a" }}
+                style={{ background: ARCHETYPE_COLORS[selectedNode.archetype] ?? "#94a3b8" }}
               />
-              <span className="text-[15px] font-semibold text-[var(--text-bright)]">{selectedNode.name}</span>
+              <span className="text-[14px] font-semibold text-[var(--text-bright)]">{selectedNode.name}</span>
+              <span
+                className="ui-mono ml-auto text-[10px] uppercase tracking-[0.12em]"
+                style={{ color: ARCHETYPE_COLORS[selectedNode.archetype] ?? "var(--text-muted)" }}
+              >
+                {ARCHETYPE_LABELS[selectedNode.archetype]}
+              </span>
             </div>
-            <div className="mb-3 ui-mono text-[10px] uppercase tracking-[0.14em]" style={{ color: ARCHETYPE_COLORS[selectedNode.archetype] ?? "var(--text-muted)" }}>
-              {ARCHETYPE_LABELS[selectedNode.archetype]}
-            </div>
-            <div className="grid grid-cols-3 gap-3">
+
+            <div className="mb-2.5 grid grid-cols-3 gap-2">
               <MiniStat label="Belief" value={`${Math.round(selectedNode.belief * 100)}%`} color={beliefTone(selectedNode.belief)} />
-              <MiniStat label="Delta" value={`${selectedNode.delta >= 0 ? "+" : ""}${Math.round(selectedNode.delta * 100)}pt`} color={selectedNode.delta >= 0 ? "#34d399" : "#fb7185"} />
-              <MiniStat label="Confidence" value={`${Math.round(selectedNode.confidence * 100)}%`} color="var(--text-primary)" />
+              <MiniStat
+                label="Delta"
+                value={`${selectedNode.delta >= 0 ? "+" : ""}${Math.round(selectedNode.delta * 100)}pt`}
+                color={selectedNode.delta >= 0 ? "#34d399" : "#fb7185"}
+              />
+              <MiniStat label="Conf" value={`${Math.round(selectedNode.confidence * 100)}%`} color="var(--text-primary)" />
             </div>
+
+            {selectedState?.reasoning && (
+              <div className="border-t border-[rgba(255,255,255,0.06)] pt-2">
+                <div className="ui-mono mb-1 text-[9px] uppercase tracking-[0.14em] text-[var(--text-subtle)]">
+                  {selectedState.action === "share_claim" ? "Shared claim" : "Updated belief"}
+                </div>
+                <p className="line-clamp-3 text-[11px] leading-[1.5] italic text-[var(--text-secondary)]">
+                  &ldquo;{selectedState.reasoning}&rdquo;
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -698,38 +677,39 @@ export function AgentConstellation({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
 function MiniStat({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div className="rounded-[16px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-3 py-2.5">
-      <div className="mb-1 ui-mono text-[10px] uppercase tracking-[0.14em] text-[var(--text-subtle)]">{label}</div>
-      <div className="ui-mono text-[15px] font-semibold" style={{ color }}>{value}</div>
+    <div className="rounded-[12px] border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] px-2.5 py-2">
+      <div className="mb-0.5 ui-mono text-[9px] uppercase tracking-[0.12em] text-[var(--text-subtle)]">{label}</div>
+      <div className="ui-mono text-[14px] font-semibold" style={{ color }}>{value}</div>
     </div>
   );
 }
 
-function LegendChip({
-  label,
-  color,
-  dashed = false,
-  strong = false,
-}: {
-  label: string;
-  color: string;
-  dashed?: boolean;
-  strong?: boolean;
-}) {
+function LinkLegendChip({ label, color, animated = false }: { label: string; color: string; animated?: boolean }) {
   return (
-    <div className="flex items-center gap-2 rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(7,9,17,0.82)] px-3 py-1.5 backdrop-blur">
+    <div className="flex items-center gap-2 rounded-full border border-[rgba(255,255,255,0.06)] bg-[rgba(7,9,17,0.8)] px-2.5 py-1 backdrop-blur-sm">
       <span
-        className="block h-[2px] w-5 rounded-full"
-        style={{
-          background: color,
-          opacity: strong ? 1 : 0.75,
-          borderTop: dashed ? `2px dashed ${color}` : undefined,
-          height: dashed ? 0 : 2,
-        }}
+        className="block h-[2px] w-4 rounded-full"
+        style={{ background: color, opacity: animated ? 1 : 0.6 }}
       />
-      <span className="ui-mono text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">{label}</span>
+      {animated && (
+        <span className="block h-1.5 w-1.5 rounded-full" style={{ background: color, animation: "pulse 1.4s ease-in-out infinite" }} />
+      )}
+      <span className="ui-mono text-[9px] uppercase tracking-[0.12em] text-[var(--text-muted)]">{label}</span>
+    </div>
+  );
+}
+
+function ArchetypeChip({ label, color }: { label: string; color: string }) {
+  return (
+    <div className="flex items-center gap-1.5 rounded-full border border-[rgba(255,255,255,0.06)] bg-[rgba(7,9,17,0.8)] px-2 py-0.5 backdrop-blur-sm">
+      <span className="block h-2 w-2 rounded-full" style={{ background: color }} />
+      <span className="ui-mono text-[8.5px] uppercase tracking-[0.1em] text-[var(--text-muted)]">{label}</span>
     </div>
   );
 }

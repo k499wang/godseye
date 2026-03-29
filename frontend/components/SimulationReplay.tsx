@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SimulationResponse, TickSnapshot } from "@/lib/types";
 import { AgentConstellation } from "./AgentConstellation";
 import { ARCHETYPE_COLORS, ARCHETYPE_LABELS } from "@/lib/constants";
@@ -40,6 +40,8 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
       : 1
   );
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [playDirection, setPlayDirection] = useState<"forward" | "backward" | null>(null);
+  const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const tickData = simulation.tick_data;
   const agents = simulation.agents;
@@ -74,8 +76,38 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
     setSelectedAgentId(agents[0].id);
   }, [agents, selectedAgentId]);
 
+  // Play/rewind: advance one tick per interval
+  useEffect(() => {
+    if (playRef.current) clearInterval(playRef.current);
+    if (!playDirection) return;
+
+    playRef.current = setInterval(() => {
+      setCurrentTick((prev) => {
+        const idx = tickData.findIndex((s) => s.tick === prev);
+        if (playDirection === "forward") {
+          if (idx >= tickData.length - 1) {
+            setPlayDirection(null);
+            return prev;
+          }
+          return tickData[idx + 1].tick;
+        } else {
+          if (idx <= 0) {
+            setPlayDirection(null);
+            return prev;
+          }
+          return tickData[idx - 1].tick;
+        }
+      });
+    }, 850);
+
+    return () => {
+      if (playRef.current) clearInterval(playRef.current);
+    };
+  }, [playDirection, tickData]);
+
   const handleTickSelect = useCallback(
     (tick: number) => {
+      setPlayDirection(null);
       if (tickData.find((snapshot) => snapshot.tick === tick)) setCurrentTick(tick);
     },
     [tickData]
@@ -133,15 +165,23 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
 
       <div className="mb-6 rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(12,16,26,0.82)] px-5 py-4 shadow-[0_16px_50px_rgba(0,0,0,0.24)] backdrop-blur-xl">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
-              className="rounded-full border border-[rgba(245,158,11,0.22)] bg-[rgba(245,158,11,0.08)] px-4 py-2 ui-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] transition hover:bg-[rgba(245,158,11,0.14)]"
+              className="rounded-full border border-[rgba(245,158,11,0.22)] bg-[rgba(245,158,11,0.08)] px-3 py-2 ui-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] transition hover:bg-[rgba(245,158,11,0.14)]"
               onClick={() => {
+                setPlayDirection(null);
                 const index = tickData.findIndex((snapshot) => snapshot.tick === currentTick);
                 if (index > 0) setCurrentTick(tickData[index - 1].tick);
               }}
             >
               Prev
+            </button>
+            <button
+              className="rounded-full border border-[rgba(245,158,11,0.22)] bg-[rgba(245,158,11,0.08)] px-3 py-2 ui-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] transition hover:bg-[rgba(245,158,11,0.14)]"
+              onClick={() => setPlayDirection((d) => (d === "backward" ? null : "backward"))}
+              title="Rewind"
+            >
+              {playDirection === "backward" ? "\u275A\u275A" : "\u25C0"}
             </button>
             <div className="rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] px-4 py-2">
               <span className="ui-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Tick </span>
@@ -150,8 +190,16 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
               </span>
             </div>
             <button
-              className="rounded-full border border-[rgba(245,158,11,0.22)] bg-[rgba(245,158,11,0.08)] px-4 py-2 ui-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] transition hover:bg-[rgba(245,158,11,0.14)]"
+              className="rounded-full border border-[rgba(245,158,11,0.22)] bg-[rgba(245,158,11,0.08)] px-3 py-2 ui-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] transition hover:bg-[rgba(245,158,11,0.14)]"
+              onClick={() => setPlayDirection((d) => (d === "forward" ? null : "forward"))}
+              title="Play"
+            >
+              {playDirection === "forward" ? "\u275A\u275A" : "\u25B6"}
+            </button>
+            <button
+              className="rounded-full border border-[rgba(245,158,11,0.22)] bg-[rgba(245,158,11,0.08)] px-3 py-2 ui-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-bright)] transition hover:bg-[rgba(245,158,11,0.14)]"
               onClick={() => {
+                setPlayDirection(null);
                 const index = tickData.findIndex((snapshot) => snapshot.tick === currentTick);
                 if (index < tickData.length - 1) setCurrentTick(tickData[index + 1].tick);
               }}
@@ -166,9 +214,15 @@ export function SimulationReplay({ simulation }: SimulationReplayProps) {
         </div>
 
         <div className="relative h-2 rounded-full bg-[rgba(255,255,255,0.08)]">
+          {/* Loaded range (dim) */}
           <div
-            className="absolute inset-y-0 left-0 rounded-full bg-[linear-gradient(90deg,var(--accent),#fbbf24)]"
+            className="absolute inset-y-0 left-0 rounded-full bg-[rgba(245,158,11,0.15)]"
             style={{ width: `${(loadedTicks / totalTicks) * 100}%` }}
+          />
+          {/* Current playhead (gold) */}
+          <div
+            className="absolute inset-y-0 left-0 rounded-full bg-[linear-gradient(90deg,var(--accent),#fbbf24)] transition-[width] duration-300"
+            style={{ width: `${((currentTick) / totalTicks) * 100}%` }}
           />
           {tickData.map((snapshot) => {
             const pct = ((snapshot.tick - 1) / Math.max(totalTicks - 1, 1)) * 100;
