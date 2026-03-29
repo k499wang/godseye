@@ -243,184 +243,79 @@ function SimulationLoadState({
   simulationId: string;
   isAutoStarting: boolean;
 }) {
-  const currentStepIndex =
-    !simulation
+  const steps = ["queue", "assemble", "first-tick"] as const;
+  const status = simulation?.status;
+  const activeIndex =
+    !simulation || status === "pending"
       ? 0
-      : simulation.status === "pending"
+      : status === "building"
         ? 1
-        : simulation.status === "building"
-          ? 2
-          : 3;
-
-  const steps = [
-    {
-      label: "Connect",
-      detail: "Loading simulation record and restoring saved state.",
-    },
-    {
-      label: "Initialize",
-      detail: isAutoStarting
-        ? "Starting the live run and locking the current market state."
-        : "Preparing the run shell and validating agents and claims.",
-    },
-    {
-      label: "Assemble",
-      detail: "Building the agent society, dossiers, and trust scaffolding.",
-    },
-    {
-      label: "First Tick",
-      detail: "Running the opening interactions and streaming the first replay frame.",
-    },
-  ];
-
-  const progress = ((currentStepIndex + (simulation?.status === "running" ? 1 : 0)) / steps.length) * 100;
-  const statusLabel =
+        : 2;
+  const headline =
     !simulation
-      ? "Connecting to simulation"
-      : simulation.status === "pending"
-        ? "Initializing live run"
-        : simulation.status === "building"
-          ? "Building agent society"
-          : "Generating first tick";
+      ? "Connecting replay"
+      : status === "pending"
+        ? isAutoStarting
+          ? "Starting simulation"
+          : "Preparing run"
+        : status === "building"
+          ? "Building agents"
+          : "Streaming first tick";
 
   return (
-    <div className="w-full max-w-[74rem] rounded-[26px] border border-white/6 bg-[rgba(10,14,22,0.92)] shadow-[0_16px_44px_rgba(0,0,0,0.16)]">
-      <div className="grid min-h-[560px] grid-cols-[1.25fr_0.95fr]">
-        <div className="flex flex-col justify-between border-r border-white/6 p-8">
-          <div>
-            <div className="mb-6 flex items-center gap-3">
-              <GodseyeLogo size="sm" />
-              <div className="ui-mono rounded-full border border-[rgba(245,158,11,0.2)] bg-[rgba(245,158,11,0.06)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
-                {statusLabel}
-              </div>
-            </div>
+    <div className="relative w-full max-w-2xl overflow-hidden rounded-[26px] border border-white/8 bg-[rgba(8,11,18,0.76)] p-7 shadow-[0_20px_70px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(circle at 50% 0%, rgba(245,158,11,0.14), transparent 52%), radial-gradient(circle at 0% 100%, rgba(96,165,250,0.09), transparent 42%)",
+        }}
+      />
 
-            <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
-              Simulation boot sequence
-            </div>
-            <h1 className="max-w-2xl text-[2rem] font-semibold tracking-[-0.04em] text-[var(--text-bright)]">
-              Bringing the simulation online tick by tick.
-            </h1>
-            <p className="mt-3 max-w-2xl text-[14px] leading-6 text-[var(--text-secondary)]">
-              The model is loading the existing run, assembling the agent network, and generating the opening interactions before the replay becomes interactive.
-            </p>
-          </div>
-
-          <div className="mt-10">
-            <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-              <span>Progress</span>
-              <span className="ui-mono text-[var(--text-bright)]">{Math.round(progress)}%</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
-              <div
-                className="h-full rounded-full bg-[linear-gradient(90deg,var(--accent),#60a5fa)] transition-all duration-700 ease-out"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          </div>
+      <div className="relative">
+        <div className="mb-4 flex items-center gap-3">
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[rgba(245,158,11,0.3)]">
+            <span className="h-3 w-3 animate-pulse rounded-full bg-[var(--accent)]" />
+          </span>
+          <span className="ui-mono text-[10px] uppercase tracking-[0.2em] text-[var(--accent)]">
+            backend live
+          </span>
         </div>
 
-        <div className="flex flex-col justify-between p-8">
-          <div className="space-y-3.5">
-            {steps.map((step, index) => {
-              const state =
-                index < currentStepIndex
-                  ? "done"
-                  : index === currentStepIndex
-                    ? "active"
-                    : "pending";
+        <h1 className="text-3xl font-semibold tracking-[-0.04em] text-[var(--text-bright)]">{headline}</h1>
+        <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+          Wiring simulation state, trust graph, and replay frames.
+        </p>
 
-              return (
-                <div
-                  key={step.label}
-                  className="rounded-[18px] border px-4 py-3 transition-all duration-500"
+        <div className="mt-6 space-y-2.5">
+          {steps.map((step, index) => {
+            const done = index < activeIndex;
+            const live = index === activeIndex;
+            return (
+              <div
+                key={step}
+                className="flex items-center justify-between rounded-xl border px-3 py-2"
+                style={{
+                  borderColor: done || live ? "rgba(245,158,11,0.24)" : "rgba(255,255,255,0.1)",
+                  background: done || live ? "rgba(245,158,11,0.05)" : "rgba(255,255,255,0.02)",
+                }}
+              >
+                <span className="ui-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{step}</span>
+                <span
+                  className="ui-mono text-[10px] uppercase tracking-[0.16em]"
                   style={{
-                    borderColor:
-                      state === "done"
-                        ? "rgba(52,211,153,0.26)"
-                        : state === "active"
-                          ? "rgba(245,158,11,0.28)"
-                          : "rgba(255,255,255,0.08)",
-                    background:
-                      state === "done"
-                        ? "rgba(52,211,153,0.06)"
-                        : state === "active"
-                          ? "rgba(245,158,11,0.08)"
-                          : "rgba(255,255,255,0.03)",
+                    color: done ? "var(--success)" : live ? "var(--accent)" : "var(--text-subtle)",
                   }}
                 >
-                  <div className="mb-1.5 flex items-center gap-3">
-                    <div
-                      className="flex h-7 w-7 items-center justify-center rounded-full border ui-mono text-[10px] font-bold"
-                      style={{
-                        borderColor:
-                          state === "done"
-                            ? "rgba(52,211,153,0.3)"
-                            : state === "active"
-                              ? "rgba(245,158,11,0.35)"
-                              : "rgba(255,255,255,0.12)",
-                        color:
-                          state === "done"
-                            ? "var(--success)"
-                            : state === "active"
-                              ? "var(--accent)"
-                              : "var(--text-muted)",
-                        background:
-                          state === "done"
-                            ? "rgba(52,211,153,0.12)"
-                            : state === "active"
-                              ? "rgba(245,158,11,0.12)"
-                              : "rgba(255,255,255,0.02)",
-                      }}
-                    >
-                      {state === "done" ? "OK" : String(index + 1).padStart(2, "0")}
-                    </div>
-                    <div>
-                      <div className="ui-mono text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                        {step.label}
-                      </div>
-                      <div className="text-[13px] font-medium text-[var(--text-bright)]">
-                        {state === "active" ? "In progress" : state === "done" ? "Complete" : "Queued"}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-[11px] leading-4.5 text-[var(--text-secondary)]">{step.detail}</div>
-                </div>
-              );
-            })}
-          </div>
+                  {done ? "done" : live ? "live" : "wait"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
 
-          <div className="mt-6 rounded-[18px] border border-white/6 bg-[rgba(255,255,255,0.018)] p-4">
-            <div className="ui-mono mb-2 text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-              Live context
-            </div>
-            <div className="grid grid-cols-2 gap-3 text-[12px] text-[var(--text-secondary)]">
-              <div>
-                <div className="ui-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)]">
-                  Simulation ID
-                </div>
-                <div className="mt-1 text-[var(--text-bright)]">{simulationId.slice(0, 8).toUpperCase()}</div>
-              </div>
-              <div>
-                <div className="ui-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)]">
-                  Current status
-                </div>
-                <div className="mt-1 text-[var(--text-bright)]">{simulation?.status ?? "loading"}</div>
-              </div>
-              <div>
-                <div className="ui-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)]">
-                  Agents loaded
-                </div>
-                <div className="mt-1 text-[var(--text-bright)]">{simulation?.agents.length ?? 0}</div>
-              </div>
-              <div>
-                <div className="ui-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)]">
-                  Ticks available
-                </div>
-                <div className="mt-1 text-[var(--text-bright)]">{simulation?.tick_data.length ?? 0}</div>
-              </div>
-            </div>
-          </div>
+        <div className="ui-mono mt-4 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+          sim {simulationId.slice(0, 8).toUpperCase()} • status {simulation?.status ?? "loading"}
         </div>
       </div>
     </div>

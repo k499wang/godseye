@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, use, useEffect, useState } from "react";
+import { ReactNode, use, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useRouter } from "next/navigation";
@@ -80,17 +80,31 @@ export default function ReportPage({
     }
   }, [openTradeFromQuery]);
 
+  const storyBeats = useMemo(
+    () => toStoryBeats(report?.summary ?? "", report?.key_drivers ?? [], 3),
+    [report?.summary, report?.key_drivers],
+  );
+  const factionBeats = useMemo(
+    () => splitIntoBeats(report?.faction_analysis ?? "", 3),
+    [report?.faction_analysis],
+  );
+  const trustBeats = useMemo(
+    () => splitIntoBeats(report?.trust_insights ?? "", 3),
+    [report?.trust_insights],
+  );
+  const recommendationBeat = useMemo(
+    () => oneLine(report?.recommendation ?? "", 170),
+    [report?.recommendation],
+  );
+
   if (!isMock && isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-base)]">
-        <div className="flex flex-col items-center gap-4">
-          <span
-            className="inline-block h-8 w-8 rounded-full border-2 border-[var(--accent)] border-t-transparent"
-            style={{ animation: "spin 0.8s linear infinite" }}
-          />
-          <span className="eyebrow text-[var(--text-muted)]">Loading report</span>
-        </div>
-      </div>
+      <BackendLoadState
+        title="Hydrating report"
+        detail="Fetching final simulation snapshot and report record."
+        phase="fetch"
+        simulationStatus={simulation?.status}
+      />
     );
   }
 
@@ -107,28 +121,20 @@ export default function ReportPage({
 
   if (waitingForReport) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-base)] px-6">
-        <div className="surface-card w-full max-w-lg p-8 text-center">
-          <div className="eyebrow mb-4 text-[var(--accent)]">Preparing report</div>
-          <h1 className="mb-3 text-3xl font-semibold tracking-tight text-[var(--text-bright)]">
-            The briefing is still being assembled.
-          </h1>
-          <p className="mx-auto max-w-md text-base leading-7 text-[var(--text-secondary)]">
-            We are waiting for the report record to appear for this simulation. This page will retry automatically every 2 seconds.
-          </p>
-          {simulation?.status && (
-            <div className="ui-mono mt-6 text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">
-              Simulation status: {simulation.status}
-            </div>
-          )}
+      <BackendLoadState
+        title="Assembling briefing"
+        detail="Simulation is complete, waiting for final report materialization. Auto-refreshing every 2s."
+        phase="render"
+        simulationStatus={simulation?.status}
+        action={
           <button
             onClick={() => router.push(simulationHref)}
-            className="ui-mono mt-6 rounded-full border border-white/15 px-5 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            className="ui-mono mt-5 rounded-full border border-white/15 px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
           >
             Back to simulation
           </button>
-        </div>
-      </div>
+        }
+      />
     );
   }
 
@@ -161,8 +167,7 @@ export default function ReportPage({
   const marketLabel = isMock
     ? MOCK_MARKET.polymarket_id.replace(/-/g, " ")
     : report.simulation_id;
-  const reportLead =
-    "Compare the live market price against a simulated consensus built from agent debate, evidence exchange, and trust dynamics.";
+  const reportLead = "Tape: live. Model: simulated.";
   const paperTrading = isMock ? MOCK_PAPER_TRADING : paperTradingData ?? { position: null, trades: [] };
 
   const probDelta = report.simulation_probability - report.market_probability;
@@ -178,7 +183,6 @@ export default function ReportPage({
           : "Leaning no";
   const deltaTone = probDelta >= 0 ? "Simulation above market" : "Simulation below market";
   const signalTone = absDelta >= 0.08 ? "Meaningful divergence" : "Tight range";
-
   return (
     <>
       <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)]">
@@ -224,9 +228,9 @@ export default function ReportPage({
           </div>
         </nav>
 
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-8 pb-16 sm:py-10 sm:pb-24">
-          <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-            <div className="surface-card relative overflow-hidden p-7 sm:p-8">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-12 px-8 py-10 pb-18 sm:px-12 sm:py-12 sm:pb-24 lg:px-20">
+          <section className="grid gap-10 border-y border-white/10 py-8 lg:grid-cols-[1.15fr_0.85fr]">
+            <div className="relative overflow-hidden">
             <div
               className="pointer-events-none absolute inset-0 opacity-90"
               style={{
@@ -240,193 +244,156 @@ export default function ReportPage({
               <h1 className="max-w-4xl text-4xl font-semibold leading-tight tracking-[-0.04em] text-[var(--text-bright)] sm:text-5xl">
                 {marketQuestion}
               </h1>
-              <p className="mt-5 max-w-3xl text-lg leading-8 text-[var(--text-secondary)]">
+              <p className="mt-4 max-w-2xl text-base leading-7 text-[var(--text-secondary)]">
                 {reportLead}
               </p>
 
-              <div className="mt-6 flex flex-wrap gap-3">
+              <div className="mt-5 flex flex-wrap gap-3">
                 <Pill>{marketLabel}</Pill>
                 <Pill>{signalTone}</Pill>
                 <Pill tone={probDelta >= 0 ? "success" : "danger"}>{deltaTone}</Pill>
                 {isMock && <Pill>Vol ${formatVolume(MOCK_MARKET.volume)}</Pill>}
               </div>
 
-              <div className="mt-8 grid gap-4 md:grid-cols-2">
-                <div className="rounded-[24px] border border-white/10 bg-[rgba(9,13,22,0.75)] p-5">
-                  <div className="eyebrow mb-3">Executive read</div>
-                  <p className="report-copy">{report.summary}</p>
-                </div>
-                <div className="rounded-[24px] border border-white/10 bg-[rgba(9,13,22,0.75)] p-5">
-                  <div className="eyebrow mb-3">Model stance</div>
-                  <div className="text-2xl font-semibold tracking-tight text-[var(--text-bright)]">
-                    {simulationTone}
-                  </div>
-                  <p className="mt-3 text-base leading-7 text-[var(--text-secondary)]">
-                    The simulation settles {deltaTone.toLowerCase()} with a spread of{" "}
-                    <span className="font-semibold text-[var(--text-bright)]">{deltaLabel}</span>.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-6 flex flex-col gap-4 rounded-[24px] border border-[rgba(245,158,11,0.16)] bg-[rgba(245,158,11,0.05)] p-5">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <div className="eyebrow mb-2 text-[var(--accent)]">Trade</div>
-                    <div className="text-xl font-semibold tracking-tight text-[var(--text-bright)]">
-                      {paperTrading.position
-                        ? `You are trade long ${paperTrading.position.side.toUpperCase()}`
-                        : "Bet this market after reading the simulation"}
-                    </div>
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-secondary)]">
-                      Save a trade position directly from the report and track it against the current market probability.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setIsTradeDrawerOpen(true)}
-                    className="ui-mono rounded-full border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.12)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)] transition hover:bg-[rgba(245,158,11,0.18)]"
-                  >
-                    {paperTrading.position ? "Add to trade position" : "Trade this market"}
-                  </button>
-                </div>
-
-                {paperTrading.position && (
-                  <PaperPositionHero
-                    side={paperTrading.position.side}
-                    avgEntryPrice={paperTrading.position.avg_entry_price}
-                    currentPrice={paperTrading.position.current_price}
-                    totalCost={paperTrading.position.total_cost}
-                    currentValue={paperTrading.position.current_value}
-                    unrealizedPnl={paperTrading.position.unrealized_pnl}
-                    unrealizedPnlPct={paperTrading.position.unrealized_pnl_pct}
-                    shares={paperTrading.position.shares}
-                  />
-                )}
+              <div className="mt-8 border-l border-white/16 pl-4">
+                <div className="eyebrow mb-3">Story</div>
+                <ol className="space-y-2.5">
+                  {storyBeats.map((beat, index) => (
+                    <li key={`${beat}-${index}`} className="flex items-start gap-3 text-sm leading-6 text-[var(--text-secondary)]">
+                      <span className="ui-mono inline-block w-5 text-[10px] font-semibold text-[var(--text-muted)]">
+                        {index + 1}.
+                      </span>
+                      <span>{`Beat ${index + 1}: ${toFragment(beat, 84)}`}</span>
+                    </li>
+                  ))}
+                </ol>
               </div>
             </div>
           </div>
 
-            <ReportVisual
-              marketProbability={report.market_probability}
-              simulationProbability={report.simulation_probability}
-              deltaLabel={deltaLabel}
-              deltaPositive={probDelta >= 0}
-            />
-          </section>
-
-          <section className="grid gap-4 md:grid-cols-3">
-          <MetricCard
-            label="Polymarket"
-            value={formatPercent(report.market_probability)}
-            detail="Current implied probability"
-          />
-          <MetricCard
-            label="Simulation"
-            value={formatPercent(report.simulation_probability)}
-            detail="Consensus after agent interaction"
-            tone={probabilityTone(report.simulation_probability)}
-          />
-          <MetricCard
-            label="Spread"
-            value={deltaLabel}
-            detail={deltaTone}
-            tone={probDelta >= 0 ? "success" : "danger"}
-          />
-          </section>
-
-          <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-          <ReportCard
-            eyebrow="Recommendation"
-            title="Trading implication"
-            accent={probDelta >= 0 ? "success" : "danger"}
-          >
-            <p className="text-lg leading-8 text-[var(--text-primary)]">
-              {report.recommendation}
-            </p>
-          </ReportCard>
-
-          <ReportCard eyebrow="Framework" title="What the simulation is capturing">
-            <ul className="space-y-3 text-base leading-7 text-[var(--text-secondary)]">
-              <li>Claim generation and evidence weighting.</li>
-              <li>Belief shifts across multiple forecaster archetypes.</li>
-              <li>Trust-network effects and information-sharing clusters.</li>
-              <li>Consensus formation compared with live market pricing.</li>
-            </ul>
-          </ReportCard>
-          </section>
-
-          <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-          <ReportCard eyebrow="Drivers" title="Key evidence drivers">
-            <div className="space-y-3">
-              {report.key_drivers.map((driver, index) => {
-                const isPositive = /positive|upward|dovish|approaching/i.test(driver);
-                return (
-                  <div
-                    key={driver}
-                    className="rounded-[22px] border border-white/8 bg-[rgba(255,255,255,0.025)] p-4"
-                  >
-                    <div className="mb-2 flex items-center gap-3">
-                      <span
-                        className="ui-mono inline-flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold"
-                        style={{
-                          borderColor: isPositive ? "rgba(52,211,153,0.32)" : "rgba(245,158,11,0.28)",
-                          color: isPositive ? "var(--success)" : "var(--accent)",
-                          background: isPositive ? "rgba(52,211,153,0.1)" : "rgba(245,158,11,0.08)",
-                        }}
-                      >
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                      <span className="eyebrow">
-                        {isPositive ? "Supportive signal" : "Counter-signal"}
-                      </span>
+            <aside className="border-l border-white/14 pl-6">
+              <div className="space-y-4">
+                <div>
+                  <div className="eyebrow mb-2">Snapshot</div>
+                  <div className="space-y-1.5 text-sm text-[var(--text-secondary)]">
+                    <div>
+                      Market: <span className="text-[var(--text-bright)]">{formatPercent(report.market_probability)}</span>
                     </div>
-                    <p className="text-base leading-7 text-[var(--text-secondary)]">{driver}</p>
+                    <div>
+                      Simulation: <span className="text-[var(--text-bright)]">{formatPercent(report.simulation_probability)}</span>
+                    </div>
+                    <div>
+                      Spread: <span className="text-[var(--text-bright)]">{deltaLabel}</span>
+                    </div>
+                    <div>
+                      Stance: <span className="text-[var(--text-bright)]">{simulationTone}</span>
+                    </div>
                   </div>
-                );
-              })}
-            </div>
-          </ReportCard>
+                </div>
 
-          <ReportCard eyebrow="Signal quality" title="Read before acting">
-            <div className="space-y-5">
-              <div>
-                <div className="eyebrow mb-2">Spread confidence</div>
-                <p className="text-base leading-7 text-[var(--text-secondary)]">
-                  {absDelta >= 0.1
-                    ? "The model is meaningfully diverging from the market and is flagging a scenario worth investigating."
-                    : "The simulation is close to market pricing, which suggests the disagreement is nuanced rather than decisive."}
-                </p>
+                <div className="space-y-2">
+                  <MiniProbabilityRail label="Market" value={report.market_probability} color="#93c5fd" />
+                  <MiniProbabilityRail
+                    label="Simulation"
+                    value={report.simulation_probability}
+                    color={probDelta >= 0 ? "#34d399" : "#fb7185"}
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <div className="eyebrow mb-2 text-[var(--accent)]">Trade</div>
+                  <div className="text-sm text-[var(--text-secondary)]">
+                    {paperTrading.position ? `Position: ${paperTrading.position.side.toUpperCase()} long` : "No position"}
+                  </div>
+                  <button
+                    onClick={() => setIsTradeDrawerOpen(true)}
+                    className="ui-mono mt-3 border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.12)] px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)] transition hover:bg-[rgba(245,158,11,0.18)]"
+                  >
+                    {paperTrading.position ? "Add" : "Trade"}
+                  </button>
+                </div>
+
+                {paperTrading.position && (
+                  <div className="pt-2">
+                    <PaperPositionHero
+                      side={paperTrading.position.side}
+                      avgEntryPrice={paperTrading.position.avg_entry_price}
+                      currentPrice={paperTrading.position.current_price}
+                      totalCost={paperTrading.position.total_cost}
+                      currentValue={paperTrading.position.current_value}
+                      unrealizedPnl={paperTrading.position.unrealized_pnl}
+                      unrealizedPnlPct={paperTrading.position.unrealized_pnl_pct}
+                      shares={paperTrading.position.shares}
+                    />
+                  </div>
+                )}
               </div>
-              <div>
-                <div className="eyebrow mb-2">Execution note</div>
-                <p className="text-base leading-7 text-[var(--text-secondary)]">
-                  Use the report as a reasoning lens, then verify the claims and recent catalysts before sizing any position.
-                </p>
-              </div>
-            </div>
-          </ReportCard>
+            </aside>
           </section>
 
-          <section className="grid gap-6 lg:grid-cols-2">
-          <ReportCard eyebrow="Faction analysis" title="How the agent blocs formed">
-            <p className="report-copy">{report.faction_analysis}</p>
-          </ReportCard>
+          <section className="grid gap-10 border-y border-white/10 py-8 lg:grid-cols-[1.2fr_0.8fr]">
+            <div>
+              <div className="eyebrow mb-3">Recommendation</div>
+              <div className="text-lg font-semibold tracking-tight text-[var(--text-bright)]">
+                {`Call: ${toFragment(recommendationBeat, 96)}`}
+              </div>
 
-          <ReportCard eyebrow="Trust network" title="Who influenced the outcome">
-            <p className="report-copy">{report.trust_insights}</p>
-          </ReportCard>
+              <div className="mt-8">
+                <div className="eyebrow mb-3">Top drivers</div>
+                <ul className="space-y-2.5 text-sm leading-6 text-[var(--text-secondary)]">
+                  {report.key_drivers.slice(0, 4).map((driver, index) => (
+                    <li key={`${driver}-${index}`} className="flex items-start gap-3 border-l border-white/14 pl-3">
+                      <span className="ui-mono inline-block w-6 text-[10px] text-[var(--text-muted)]">{index + 1}.</span>
+                      <span>{`D${index + 1}: ${toFragment(driver, 86)}`}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div className="border-l border-white/14 pl-6">
+              <div className="eyebrow mb-3">Signal quality</div>
+              <div className="space-y-2 text-sm leading-6 text-[var(--text-secondary)]">
+                <div>{`Gap: ${absDelta >= 0.1 ? "large" : "small"}`}</div>
+                <div>{`Read: ${absDelta >= 0.1 ? "mispricing setup" : "timing edge"}`}</div>
+                <div>Risk: catalyst + liquidity</div>
+              </div>
+
+              <div className="mt-7 space-y-5">
+                <div>
+                  <div className="eyebrow mb-2">Faction</div>
+                  <ul className="space-y-2 text-sm leading-6 text-[var(--text-secondary)]">
+                    {factionBeats.slice(0, 2).map((beat, index) => (
+                      <li key={`${beat}-${index}`} className="border-l border-white/14 pl-3">
+                        {`F${index + 1}: ${toFragment(beat, 74)}`}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <div className="eyebrow mb-2">Trust</div>
+                  <ul className="space-y-2 text-sm leading-6 text-[var(--text-secondary)]">
+                    {trustBeats.slice(0, 2).map((beat, index) => (
+                      <li key={`${beat}-${index}`} className="border-l border-white/14 pl-3">
+                        {`T${index + 1}: ${toFragment(beat, 74)}`}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
           </section>
 
           <footer className="flex flex-col gap-4 border-t border-white/8 pt-6 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="eyebrow mb-1">Report trace</div>
               <div className="text-sm text-[var(--text-secondary)]">
-                Report {report.id.slice(0, 8).toUpperCase()} linked to simulation{" "}
-                {report.simulation_id.slice(0, 8).toUpperCase()}.
+                Report {report.id.slice(0, 8).toUpperCase()} • Sim {report.simulation_id.slice(0, 8).toUpperCase()}.
               </div>
             </div>
             <button
               onClick={() => router.push(simulationHref)}
-              className="ui-mono rounded-full border border-white/12 px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              className="ui-mono border border-white/12 px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
             >
               Return to replay
             </button>
@@ -475,12 +442,12 @@ function MetricCard({
           : "var(--text-bright)";
 
   return (
-    <div className="surface-card p-6">
+    <div className="border-y border-white/10 py-4">
       <div className="eyebrow mb-5">{label}</div>
       <div className="metric-display" style={{ color }}>
         {value}
       </div>
-      <div className="mt-3 text-base text-[var(--text-secondary)]">{detail}</div>
+      <div className="mt-2 text-sm text-[var(--text-secondary)]">{detail}</div>
     </div>
   );
 }
@@ -504,9 +471,9 @@ function ReportCard({
         : "rgba(255,255,255,0.08)";
 
   return (
-    <div className="surface-card p-6 sm:p-7" style={{ borderColor: accentColor }}>
+    <div className="border-l-2 px-4 py-3 sm:px-5" style={{ borderColor: accentColor }}>
       <div className="eyebrow mb-3">{eyebrow}</div>
-      <h2 className="mb-4 text-2xl font-semibold tracking-tight text-[var(--text-bright)]">
+      <h2 className="mb-3 text-xl font-semibold tracking-tight text-[var(--text-bright)]">
         {title}
       </h2>
       {children}
@@ -530,7 +497,7 @@ function ReportVisual({
   const deltaColor = deltaPositive ? "var(--success)" : "var(--danger)";
 
   return (
-    <div className="surface-card relative overflow-hidden p-6 sm:p-7">
+    <div className="relative overflow-hidden border-y border-white/10 py-6 sm:py-7">
       <div
         className="pointer-events-none absolute inset-0 opacity-95"
         style={{
@@ -548,7 +515,7 @@ function ReportVisual({
             </h2>
           </div>
           <span
-            className="ui-mono rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]"
+            className="ui-mono border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]"
             style={{
               color: deltaColor,
               borderColor: deltaPositive ? "rgba(52,211,153,0.34)" : "rgba(251,113,133,0.3)",
@@ -559,7 +526,7 @@ function ReportVisual({
           </span>
         </div>
 
-        <div className="grid flex-1 grid-cols-[1fr_auto_1fr] items-end gap-4 rounded-[24px] border border-white/8 bg-[rgba(5,7,13,0.58)] px-5 pb-5 pt-10">
+        <div className="grid flex-1 grid-cols-[1fr_auto_1fr] items-end gap-4 border-y border-white/12 bg-[rgba(5,7,13,0.58)] px-5 pb-5 pt-10">
           <SignalBar
             label="Market"
             value={marketProbability}
@@ -576,18 +543,16 @@ function ReportVisual({
         </div>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-[22px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-4">
+          <div className="border-l border-white/14 pl-4">
             <div className="eyebrow mb-2">Interpretation</div>
-            <div className="text-base leading-7 text-[var(--text-secondary)]">
-              The visual above is generated directly from the market and simulation
-              probabilities so each report gets its own signal profile.
+            <div className="text-sm leading-6 text-[var(--text-secondary)]">
+              Derived from market and simulation probabilities.
             </div>
           </div>
-          <div className="rounded-[22px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-4">
+          <div className="border-l border-white/14 pl-4">
             <div className="eyebrow mb-2">Next step</div>
-            <div className="text-base leading-7 text-[var(--text-secondary)]">
-              A future backend field can swap this placeholder for a market-specific
-              image or richer chart pack without changing the layout.
+            <div className="text-sm leading-6 text-[var(--text-secondary)]">
+              Replace with backend visual pack when available.
             </div>
           </div>
         </div>
@@ -614,7 +579,7 @@ function SignalBar({
       <div className="mb-3 text-sm font-medium text-[var(--text-secondary)]">{label}</div>
       <div className="relative flex h-[260px] items-end">
         <div
-          className="w-24 rounded-[22px] border border-white/10"
+          className="w-24 border border-white/10"
           style={{
             height,
             background: `linear-gradient(180deg, ${color} 0%, rgba(12,17,25,0.22) 100%)`,
@@ -664,7 +629,7 @@ function Pill({
 
   return (
     <span
-      className="ui-mono inline-flex rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em]"
+      className="ui-mono inline-flex border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em]"
       style={styles}
     >
       {children}
@@ -723,7 +688,7 @@ function PositionMetric({
   tone?: "success" | "danger";
 }) {
   return (
-    <div className="rounded-[18px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3">
+    <div className="border-l border-white/14 px-4 py-2">
       <div className="eyebrow mb-1">{label}</div>
       <div
         className="text-base font-semibold"
@@ -753,8 +718,150 @@ function formatVolume(value: number) {
   return String(value);
 }
 
+function MiniProbabilityRail({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color: string;
+}) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-[11px] text-[var(--text-secondary)]">
+        <span>{label}</span>
+        <span className="ui-mono text-[var(--text-bright)]">{formatPercent(value)}</span>
+      </div>
+      <div className="h-1.5 w-full bg-white/8">
+        <div
+          className="h-full"
+          style={{ width: `${Math.max(2, Math.round(value * 100))}%`, background: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function probabilityTone(value: number): "success" | "danger" | "warning" {
   if (value >= 0.65) return "success";
   if (value <= 0.4) return "danger";
   return "warning";
+}
+
+function toFragment(text: string, maxLength = 88): string {
+  return oneLine(text, maxLength).replace(/[.!?]+$/g, "");
+}
+
+function oneLine(text: string, maxLength = 160): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 1).trim()}...`;
+}
+
+function splitIntoBeats(text: string, maxItems: number): string[] {
+  const raw = text
+    .split(/(?<=[.!?])\s+/)
+    .map((line) => oneLine(line, 140))
+    .filter(Boolean);
+
+  if (raw.length >= maxItems) {
+    return raw.slice(0, maxItems);
+  }
+
+  return [oneLine(text, 140)];
+}
+
+function toStoryBeats(summary: string, drivers: string[], maxItems: number): string[] {
+  const beats = [oneLine(summary, 135), ...drivers.map((driver) => oneLine(driver, 120))]
+    .filter(Boolean)
+    .slice(0, maxItems);
+
+  if (beats.length === 0) return ["No summary available yet."];
+  return beats;
+}
+
+function BackendLoadState({
+  title,
+  detail,
+  phase,
+  simulationStatus,
+  action,
+}: {
+  title: string;
+  detail: string;
+  phase: "fetch" | "render";
+  simulationStatus?: string;
+  action?: ReactNode;
+}) {
+  const steps = [
+    { id: "queue", label: "queue" },
+    { id: "build", label: "build" },
+    { id: "materialize", label: "materialize" },
+  ] as const;
+
+  const activeIndex = phase === "fetch" ? 1 : 2;
+
+  return (
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--bg-base)] px-6">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(circle at 50% 40%, rgba(245,158,11,0.12) 0%, transparent 44%), radial-gradient(circle at 20% 85%, rgba(96,165,250,0.08) 0%, transparent 36%)",
+        }}
+      />
+      <div className="relative w-full max-w-md rounded-[24px] border border-white/8 bg-[rgba(9,12,20,0.74)] p-6 backdrop-blur-xl">
+        <div className="mb-4 flex items-center gap-3">
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[rgba(245,158,11,0.32)]">
+            <span className="h-3 w-3 animate-pulse rounded-full bg-[var(--accent)]" />
+          </span>
+          <span className="ui-mono text-[10px] uppercase tracking-[0.2em] text-[var(--accent)]">
+            backend pipeline
+          </span>
+        </div>
+
+        <h1 className="text-2xl font-semibold tracking-[-0.03em] text-[var(--text-bright)]">{title}</h1>
+        <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">{detail}</p>
+
+        <div className="mt-5 space-y-2.5">
+          {steps.map((step, index) => {
+            const done = index < activeIndex;
+            const active = index === activeIndex;
+            return (
+              <div
+                key={step.id}
+                className="flex items-center justify-between rounded-xl border px-3 py-2"
+                style={{
+                  borderColor: done || active ? "rgba(245,158,11,0.24)" : "rgba(255,255,255,0.09)",
+                  background:
+                    done || active ? "rgba(245,158,11,0.06)" : "rgba(255,255,255,0.02)",
+                }}
+              >
+                <span className="ui-mono text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  {step.label}
+                </span>
+                <span
+                  className="ui-mono text-[10px] uppercase tracking-[0.14em]"
+                  style={{
+                    color: done ? "var(--success)" : active ? "var(--accent)" : "var(--text-subtle)",
+                  }}
+                >
+                  {done ? "done" : active ? "live" : "wait"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {simulationStatus && (
+          <div className="ui-mono mt-4 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+            simulation: {simulationStatus}
+          </div>
+        )}
+
+        {action}
+      </div>
+    </div>
+  );
 }
