@@ -128,6 +128,7 @@ class WorldBuilder:
         session_id: str,
         simulation_id: str,
         market_question: str,
+        skip_llm_profiles: bool = False,
     ) -> list[AgentRecord]:
         """
         Create 12 agents for *simulation_id*.
@@ -140,7 +141,7 @@ class WorldBuilder:
         DB layer.
         """
         # --- Step 1: get professional backgrounds ---
-        profiles = await self._get_profiles(market_question)
+        profiles = self._fallback_profiles() if skip_llm_profiles else await self._get_profiles(market_question)
 
         # --- Step 2: create agents ---
         agents: list[AgentRecord] = []

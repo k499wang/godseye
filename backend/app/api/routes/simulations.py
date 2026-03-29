@@ -2,7 +2,7 @@ import asyncio
 from decimal import Decimal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -34,6 +34,7 @@ class BuildWorldRequest(BaseModel):
 @router.post("/build-world", response_model=SimulationResponse)
 async def build_world(
     payload: BuildWorldRequest,
+    demo: bool = Query(False, description="Demo mode: skip LLM profile generation"),
     db: AsyncSession = Depends(get_db),
 ) -> SimulationResponse:
     session = await _load_session(db=db, session_id=payload.session_id)
@@ -71,6 +72,7 @@ async def build_world(
             simulation_id=simulation.id,
             session_id=session.id,
             market_question=session.market.question,
+            demo=demo,
         )
     )
 
@@ -86,6 +88,7 @@ async def build_world(
 @router.post("/{id}/start", response_model=SimulationResponse)
 async def start_simulation(
     id: UUID,
+    demo: bool = Query(False, description="Demo mode: run 10 ticks instead of 30"),
     db: AsyncSession = Depends(get_db),
 ) -> SimulationResponse:
     simulation = await _load_simulation(db=db, simulation_id=id)
@@ -101,7 +104,9 @@ async def start_simulation(
     if simulation.status in {"running", "complete"}:
         return _to_simulation_response(simulation)
 
+    total_ticks = 10 if demo else 30
     simulation.status = "running"
+    simulation.total_ticks = total_ticks
     await db.commit()
 
     claim_rows = await _load_claim_rows(db=db, session_id=simulation.session_id)
@@ -121,6 +126,7 @@ async def start_simulation(
                 }
                 for claim in claim_rows
             ],
+            total_ticks=total_ticks,
         )
     )
 
@@ -242,6 +248,7 @@ async def _build_world_background(
     simulation_id: UUID,
     session_id: UUID,
     market_question: str,
+    demo: bool = False,
 ) -> None:
     async with SessionLocal() as db:
         try:
@@ -258,6 +265,7 @@ async def _build_world_background(
                 session_id=str(session_id),
                 simulation_id=str(simulation_id),
                 market_question=market_question,
+                skip_llm_profiles=demo,
             )
 
             db.add_all(

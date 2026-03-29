@@ -41,6 +41,7 @@ async def run_simulation(
     market_question: str = "",
     market_probability: float = 0.5,
     claims: list[dict[str, Any]] | None = None,
+    total_ticks: int = 30,
 ) -> SimulationResult:
     """
     Full pipeline: build world -> run simulation -> persist results.
@@ -97,6 +98,7 @@ async def run_simulation(
             agents=agents,
             claims=claim_objects,
             market_question=market_question,
+            total_ticks=total_ticks,
             on_tick_complete=(
                 (lambda snapshot, current_agents: _persist_tick(
                     db,
